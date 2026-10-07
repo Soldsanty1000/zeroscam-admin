@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, errorMessage, getAccessToken, logout } from '@/lib/api';
 
@@ -37,15 +38,20 @@ export default function HomePage() {
           Cerrar sesión
         </button>
       </header>
+      <p>
+        <Link href="/usuarios">Usuarios</Link>
+      </p>
       {error && <p role="alert">{error}</p>}
       {!error && !reports && <p>Cargando…</p>}
       {reports?.length === 0 && <p>Todavía no hay reportes.</p>}
       <ul>
         {reports?.map((report) => (
           <li key={report.id}>
-            <strong>
-              #{report.id} · {report.fraudType}
-            </strong>
+            <Link href={`/reportes/${report.id}`}>
+              <strong>
+                #{report.id} · {report.fraudType}
+              </strong>
+            </Link>
             <span>
               {report.status} · riesgo {report.riskLevel}
             </span>
