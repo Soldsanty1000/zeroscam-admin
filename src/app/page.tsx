@@ -39,7 +39,8 @@ export default function HomePage() {
         </button>
       </header>
       <p>
-        <Link href="/usuarios">Usuarios</Link>
+        <Link href="/usuarios">Usuarios</Link> ·{' '}
+        <Link href="/estadisticas">Estadísticas</Link>
       </p>
       {error && <p role="alert">{error}</p>}
       {!error && !reports && <p>Cargando…</p>}
