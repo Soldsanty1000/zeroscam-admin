@@ -69,3 +69,55 @@ li {
   padding: 0.75rem 0;
   border-bottom: 1px solid #8884;
 }
+
+/* ---------- Gráficas (/estadisticas) ---------- */
+
+/* Colores de las gráficas, por función. El modo oscuro tiene sus propios
+   pasos del mismo azul: no es el claro invertido. */
+:root {
+  --chart-surface: #fcfcfb;
+  --chart-ink: #0b0b0b;
+  --chart-muted: #6f6d68;
+  --chart-grid: #e1e0d9;
+  --chart-axis: #c3c2b7;
+  --chart-hover: #0b0b0b0f;
+  --chart-series: #2a78d6;
+  --chart-neutral: #898781;
+  --chart-risk-1: #86b6ef;
+  --chart-risk-2: #3987e5;
+  --chart-risk-3: #1c5cab;
+  --chart-risk-4: #0d366b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chart-surface: #1a1a19;
+    --chart-ink: #ffffff;
+    --chart-muted: #a3a199;
+    --chart-grid: #2c2c2a;
+    --chart-axis: #383835;
+    --chart-hover: #ffffff14;
+    --chart-series: #3987e5;
+    --chart-neutral: #898781;
+    /* En oscuro lo más grave es lo más claro: es lo que más resalta. */
+    --chart-risk-1: #184f95;
+    --chart-risk-2: #2a78d6;
+    --chart-risk-3: #6da7ec;
+    --chart-risk-4: #b7d3f6;
+  }
+}
+
+.chart {
+  background: var(--chart-surface);
+  border: 1px solid var(--chart-grid);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+details {
+  margin-top: 0.5rem;
+}
+
+summary {
+  cursor: pointer;
+}

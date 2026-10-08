@@ -4,8 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, errorMessage, getAccessToken, logout } from '@/lib/api';
-
-type Count = { name: string; count: number };
+import { CountChart, type Count } from './count-chart';
 
 type Stats = {
   total: number;
@@ -38,23 +37,6 @@ type Filters = {
 };
 
 const RISK_LEVELS = ['BAJO', 'MEDIO', 'ALTO', 'MUY_ALTO'];
-
-function CountList({ title, counts }: { title: string; counts: Count[] }) {
-  return (
-    <section>
-      <h2>{title}</h2>
-      {counts.length === 0 && <p>Sin datos.</p>}
-      <ul>
-        {counts.map((item) => (
-          <li key={item.name}>
-            <span>{item.name}</span>
-            <strong>{item.count}</strong>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
 
 export default function StatsPage() {
   const router = useRouter();
@@ -173,11 +155,15 @@ export default function StatsPage() {
               </li>
             </ul>
           </section>
-          <CountList title="Por estado" counts={stats.byStatus} />
-          <CountList title="Por tipo de fraude" counts={stats.byFraudType} />
-          <CountList title="Por nivel de riesgo" counts={stats.byRiskLevel} />
-          <CountList title="Por país" counts={stats.byCountry} />
-          <CountList title="Por mes" counts={stats.byMonth} />
+          <CountChart title="Por estado" counts={stats.byStatus} />
+          <CountChart title="Por tipo de fraude" counts={stats.byFraudType} />
+          <CountChart
+            title="Por nivel de riesgo"
+            counts={stats.byRiskLevel}
+            kind="risk"
+          />
+          <CountChart title="Por país" counts={stats.byCountry} />
+          <CountChart title="Por mes" counts={stats.byMonth} kind="months" />
         </>
       )}
 
@@ -226,18 +212,27 @@ export default function StatsPage() {
               </li>
             </ul>
           </section>
-          <CountList title="Cuentas por rol" counts={site.users.byRole} />
-          <CountList
+          <CountChart title="Cuentas por rol" counts={site.users.byRole} />
+          <CountChart
             title="Cuentas por estado"
             counts={site.users.byAccountStatus}
           />
-          <CountList title="Cuentas por país" counts={site.users.byCountry} />
-          <CountList title="Registros por mes" counts={site.users.byMonth} />
-          <CountList
+          <CountChart title="Cuentas por país" counts={site.users.byCountry} />
+          <CountChart
+            title="Registros por mes"
+            counts={site.users.byMonth}
+            kind="months"
+          />
+          <CountChart
             title="URLs por nivel de riesgo"
             counts={site.urls.byRiskLevel}
+            kind="risk"
           />
-          <CountList title="Consultas por mes" counts={site.lookups.byMonth} />
+          <CountChart
+            title="Consultas por mes"
+            counts={site.lookups.byMonth}
+            kind="months"
+          />
         </>
       )}
     </main>
