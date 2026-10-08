@@ -17,6 +17,19 @@ type Stats = {
   approvalRate: number | null;
 };
 
+type SiteStats = {
+  users: {
+    total: number;
+    byRole: Count[];
+    byAccountStatus: Count[];
+    byCountry: Count[];
+    byMonth: Count[];
+  };
+  urls: { total: number; analyzed: number; byRiskLevel: Count[] };
+  lookups: { total: number; users: number; byMonth: Count[] };
+  notifications: { total: number; unread: number; riskAlerts: number };
+};
+
 type Filters = {
   from?: string;
   to?: string;
@@ -48,6 +61,8 @@ export default function StatsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [filters, setFilters] = useState<Filters>({});
   const [error, setError] = useState('');
+  const [site, setSite] = useState<SiteStats | null>(null);
+  const [siteError, setSiteError] = useState('');
 
   const load = useCallback(() => {
     return api
@@ -56,13 +71,32 @@ export default function StatsPage() {
       .catch((e) => setError(errorMessage(e)));
   }, [filters]);
 
+  const loadSite = useCallback(() => {
+    // Las métricas de la plataforma solo aceptan el periodo, no el país ni
+    // el riesgo. Su error va aparte: la Policía ve los reportes pero no
+    // esta parte, y eso no debe tapar lo demás.
+    return api
+      .get<SiteStats>('/stats/site', {
+        params: { from: filters.from, to: filters.to },
+      })
+      .then(({ data }) => {
+        setSite(data);
+        setSiteError('');
+      })
+      .catch((e) => {
+        setSite(null);
+        setSiteError(errorMessage(e));
+      });
+  }, [filters]);
+
   useEffect(() => {
     if (!getAccessToken()) {
       router.replace('/login');
       return;
     }
     load();
-  }, [router, load]);
+    loadSite();
+  }, [router, load, loadSite]);
 
   function handleFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -123,7 +157,7 @@ export default function StatsPage() {
       {stats && (
         <>
           <section>
-            <h2>Resumen</h2>
+            <h2>Resumen de reportes</h2>
             <ul>
               <li>
                 <span>Reportes</span>
@@ -144,6 +178,66 @@ export default function StatsPage() {
           <CountList title="Por nivel de riesgo" counts={stats.byRiskLevel} />
           <CountList title="Por país" counts={stats.byCountry} />
           <CountList title="Por mes" counts={stats.byMonth} />
+        </>
+      )}
+
+      <section>
+        <h2>Plataforma</h2>
+        <p>Cuentas, URLs, consultas de riesgo y notificaciones.</p>
+        {siteError && <p role="alert">{siteError}</p>}
+        {!siteError && !site && <p>Cargando…</p>}
+      </section>
+      {site && (
+        <>
+          <section>
+            <h2>Resumen de la plataforma</h2>
+            <ul>
+              <li>
+                <span>Cuentas registradas</span>
+                <strong>{site.users.total}</strong>
+              </li>
+              <li>
+                <span>URLs en el directorio</span>
+                <strong>{site.urls.total}</strong>
+              </li>
+              <li>
+                <span>URLs ya analizadas</span>
+                <strong>{site.urls.analyzed}</strong>
+              </li>
+              <li>
+                <span>Consultas de riesgo</span>
+                <strong>{site.lookups.total}</strong>
+              </li>
+              <li>
+                <span>Usuarios que consultaron</span>
+                <strong>{site.lookups.users}</strong>
+              </li>
+              <li>
+                <span>Notificaciones enviadas</span>
+                <strong>{site.notifications.total}</strong>
+              </li>
+              <li>
+                <span>Notificaciones sin leer</span>
+                <strong>{site.notifications.unread}</strong>
+              </li>
+              <li>
+                <span>Alertas de riesgo de una URL</span>
+                <strong>{site.notifications.riskAlerts}</strong>
+              </li>
+            </ul>
+          </section>
+          <CountList title="Cuentas por rol" counts={site.users.byRole} />
+          <CountList
+            title="Cuentas por estado"
+            counts={site.users.byAccountStatus}
+          />
+          <CountList title="Cuentas por país" counts={site.users.byCountry} />
+          <CountList title="Registros por mes" counts={site.users.byMonth} />
+          <CountList
+            title="URLs por nivel de riesgo"
+            counts={site.urls.byRiskLevel}
+          />
+          <CountList title="Consultas por mes" counts={site.lookups.byMonth} />
         </>
       )}
     </main>
