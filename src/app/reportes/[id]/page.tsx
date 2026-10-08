@@ -70,6 +70,31 @@ export default function ReportPage() {
     setSending(false);
   }
 
+  async function handleExport() {
+    setError('');
+    setNotice('');
+    setSending(true);
+    try {
+      const { data } = await api.get<{ folio: string }>(
+        `/reports/${id}/export`,
+      );
+      // Un enlace normal no puede mandar el Bearer: el expediente se pide
+      // con `api` y el archivo se arma aquí con lo que regresó.
+      const file = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json',
+      });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(file);
+      link.download = `${data.folio}.json`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      setNotice(`Expediente ${data.folio} descargado`);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+    setSending(false);
+  }
+
   function handleStatus(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -145,6 +170,17 @@ export default function ReportPage() {
                 </li>
               ))}
             </ul>
+          </section>
+
+          <section>
+            <h2>Expediente</h2>
+            <p>
+              Formato para canalizar el reporte a la Policía Cibernética.
+              Solo reportes VALIDADO o CANALIZADO.
+            </p>
+            <button type="button" disabled={sending} onClick={handleExport}>
+              Descargar expediente
+            </button>
           </section>
 
           <section>
