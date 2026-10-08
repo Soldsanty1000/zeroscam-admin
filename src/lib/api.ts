@@ -47,11 +47,42 @@ api.interceptors.request.use((config) => {
 
 // ---------- Sesión ----------
 
-export async function login(email: string, password: string): Promise<void> {
-  const { data } = await api.post<{
-    accessToken: string;
-    refreshToken: string;
-  }>('/auth/login', { email, password });
+/** Lo que regresa el login cuando la cuenta tiene verificación en dos pasos. */
+export type TwoFactorChallenge = {
+  challengeId: string;
+  /** Correo enmascarado al que se mandó el código. */
+  destination: string;
+};
+
+type Tokens = { accessToken: string; refreshToken: string };
+
+/**
+ * Inicia sesión. Si la cuenta tiene verificación en dos pasos no hay tokens
+ * todavía: regresa el desafío, que se canjea con `verifyCode`.
+ */
+export async function login(
+  email: string,
+  password: string,
+): Promise<TwoFactorChallenge | null> {
+  const { data } = await api.post<
+    Tokens | ({ twoFactorRequired: true } & TwoFactorChallenge)
+  >('/auth/login', { email, password });
+  if ('twoFactorRequired' in data) {
+    return { challengeId: data.challengeId, destination: data.destination };
+  }
+  saveTokens(data);
+  return null;
+}
+
+/** Segundo paso del login: el código de 6 dígitos del desafío. */
+export async function verifyCode(
+  challengeId: string,
+  code: string,
+): Promise<void> {
+  const { data } = await api.post<Tokens>('/auth/two-factor/verify', {
+    challengeId,
+    code,
+  });
   saveTokens(data);
 }
 
