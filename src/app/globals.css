@@ -1,123 +1,259 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* Fuentes servidas desde el propio panel (sin pedirlas a internet): la red
+   donde corre puede no tener salida. */
+@import '@fontsource-variable/fraunces/opsz.css';
+@import '@fontsource-variable/fraunces/opsz-italic.css';
+@import '@fontsource-variable/schibsted-grotesk/wght.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------- Tokens ----------
+   "Expediente": papel cálido, tinta azul marino y el ámbar de la app 0Fraude
+   como única señal. El modo oscuro usa el azul de la app, no el claro invertido. */
 :root {
-  color-scheme: light dark;
-  font-family: system-ui, sans-serif;
+  --paper: #f3efe6;
+  --surface: #fbf9f4;
+  --surface-sunk: #ebe6da;
+  --ink: #0a1330;
+  --ink-soft: #3b4360;
+  --muted: #6f6a5f;
+  --line: #d9d2c3;
+  --line-strong: #bdb4a1;
+  --signal: #f5a623;
+  --signal-ink: #8a5300;
+  --signal-wash: #fbe9c4;
+  --focus: #0a1330;
+
+  --st-recibido: #47607f;
+  --st-revision: #a8650a;
+  --st-validado: #2f6b3f;
+  --st-rechazado: #a8302f;
+  --st-canalizado: #4a3f8f;
+
+  --risk-0: #b9b2a3;
+  --risk-1: #d9b56a;
+  --risk-2: #e08a2c;
+  --risk-3: #c8492b;
+  --risk-4: #8f1d2c;
+
+  --chart-surface: var(--surface);
+  --chart-ink: var(--ink);
+  --chart-muted: var(--muted);
+  --chart-grid: var(--line);
+  --chart-axis: var(--line-strong);
+  --chart-hover: #0a13300d;
+  --chart-series: var(--ink);
+  --chart-neutral: var(--risk-0);
+  /* Riesgo en gráficas: una sola tinta (ámbar) de clara a oscura, porque es
+     una magnitud ordenada. */
+  --chart-risk-1: #f0d29a;
+  --chart-risk-2: #da9a2e;
+  --chart-risk-3: #a5640a;
+  --chart-risk-4: #683a00;
+
+  --shadow-card: 0 1px 0 #ffffffb3 inset, 0 1px 2px #0a13300f, 0 8px 24px -16px #0a133033;
+  --shadow-pop: 0 1px 0 #ffffffb3 inset, 0 12px 40px -12px #0a133055, 0 2px 6px #0a13301a;
+  color-scheme: light;
 }
 
-body {
-  margin: 0;
-  padding: 2rem 1rem;
+.dark {
+  --paper: #070d22;
+  --surface: #0e1836;
+  --surface-sunk: #0a1330;
+  --ink: #f4efe3;
+  --ink-soft: #c5c6d3;
+  --muted: #8c93ad;
+  --line: #1f2b55;
+  --line-strong: #2f3d70;
+  --signal: #f5a623;
+  --signal-ink: #f7bd5c;
+  --signal-wash: #3a2a08;
+  --focus: #f5a623;
+
+  --st-recibido: #8fb0dc;
+  --st-revision: #f0b455;
+  --st-validado: #7fc893;
+  --st-rechazado: #f08a84;
+  --st-canalizado: #b0a6f5;
+
+  --risk-0: #56608a;
+  --risk-1: #c9a45a;
+  --risk-2: #f0962f;
+  --risk-3: #f0623f;
+  --risk-4: #ff4b5f;
+
+  --chart-hover: #ffffff12;
+  --chart-series: #8fb0dc;
+  /* En oscuro lo más grave es lo más claro: es lo que más resalta. */
+  --chart-risk-1: #7a5208;
+  --chart-risk-2: #b8790f;
+  --chart-risk-3: #f5a623;
+  --chart-risk-4: #fbd993;
+
+  --shadow-card: 0 1px 0 #ffffff0a inset, 0 8px 24px -16px #000000cc;
+  --shadow-pop: 0 1px 0 #ffffff0f inset, 0 16px 48px -12px #000000e6;
+  color-scheme: dark;
 }
 
-main {
-  max-width: 28rem;
-  margin: 0 auto;
-}
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-sunk: var(--surface-sunk);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-signal: var(--signal);
+  --color-signal-ink: var(--signal-ink);
+  --color-signal-wash: var(--signal-wash);
+  --color-danger: var(--st-rechazado);
+  --color-ok: var(--st-validado);
 
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
+  --font-sans: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces Variable', ui-serif, Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
 
-form {
-  display: grid;
-  gap: 1rem;
-}
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
 
-label {
-  display: grid;
-  gap: 0.25rem;
-}
+  --animate-rise: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-fade: fade 0.4s ease both;
 
-input,
-select,
-textarea,
-button {
-  font: inherit;
-  padding: 0.5rem 0.75rem;
-}
-
-[role='alert'] {
-  color: #c0392b;
-}
-
-[role='status'] {
-  color: #1e8449;
-}
-
-section {
-  margin-top: 2rem;
-}
-
-h2 {
-  font-size: 1.1rem;
-}
-
-li {
-  overflow-wrap: anywhere;
-}
-
-ul {
-  list-style: none;
-  padding: 0;
-}
-
-li {
-  display: grid;
-  gap: 0.25rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid #8884;
-}
-
-/* ---------- Gráficas (/estadisticas) ---------- */
-
-/* Colores de las gráficas, por función. El modo oscuro tiene sus propios
-   pasos del mismo azul: no es el claro invertido. */
-:root {
-  --chart-surface: #fcfcfb;
-  --chart-ink: #0b0b0b;
-  --chart-muted: #6f6d68;
-  --chart-grid: #e1e0d9;
-  --chart-axis: #c3c2b7;
-  --chart-hover: #0b0b0b0f;
-  --chart-series: #2a78d6;
-  --chart-neutral: #898781;
-  --chart-risk-1: #86b6ef;
-  --chart-risk-2: #3987e5;
-  --chart-risk-3: #1c5cab;
-  --chart-risk-4: #0d366b;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --chart-surface: #1a1a19;
-    --chart-ink: #ffffff;
-    --chart-muted: #a3a199;
-    --chart-grid: #2c2c2a;
-    --chart-axis: #383835;
-    --chart-hover: #ffffff14;
-    --chart-series: #3987e5;
-    --chart-neutral: #898781;
-    /* En oscuro lo más grave es lo más claro: es lo que más resalta. */
-    --chart-risk-1: #184f95;
-    --chart-risk-2: #2a78d6;
-    --chart-risk-3: #6da7ec;
-    --chart-risk-4: #b7d3f6;
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }
 
-.chart {
-  background: var(--chart-surface);
-  border: 1px solid var(--chart-grid);
-  border-radius: 8px;
-  padding: 0.75rem;
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-feature-settings: 'ss01', 'cv05';
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    min-height: 100dvh;
+    background:
+      radial-gradient(1200px 600px at 100% -10%, color-mix(in oklab, var(--signal) 9%, transparent), transparent 60%),
+      var(--paper);
+  }
+
+  /* Grano de papel: una sola capa fija, sin eventos. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.35;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .04 0 0 0 0 .07 0 0 0 0 .19 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .dark body::before {
+    opacity: 0.5;
+    mix-blend-mode: soft-light;
+  }
+
+  ::selection {
+    background: var(--signal);
+    color: #0a1330;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
-details {
-  margin-top: 0.5rem;
+@layer utilities {
+  /* Titulares y cifras: Fraunces con el eje óptico al tamaño del texto. */
+  .display {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+    font-weight: 480;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+  }
+
+  /* Microetiqueta de expediente: mono, versalitas, espaciada. */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .tnum {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .hairline {
+    background-image: linear-gradient(to right, var(--line-strong) 50%, transparent 0);
+    background-size: 6px 1px;
+    background-repeat: repeat-x;
+    height: 1px;
+  }
+
+  /* Entrada escalonada: cada hijo directo sube con un pequeño retraso. */
+  .stagger > * {
+    animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0.02s; }
+  .stagger > *:nth-child(2) { animation-delay: 0.07s; }
+  .stagger > *:nth-child(3) { animation-delay: 0.12s; }
+  .stagger > *:nth-child(4) { animation-delay: 0.17s; }
+  .stagger > *:nth-child(5) { animation-delay: 0.22s; }
+  .stagger > *:nth-child(6) { animation-delay: 0.27s; }
+  .stagger > *:nth-child(n + 7) { animation-delay: 0.32s; }
 }
 
-summary {
-  cursor: pointer;
+/* Gráficas de recharts: el contenedor lo pinta Tailwind; aquí solo el foco. */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
 }
