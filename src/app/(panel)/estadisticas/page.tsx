@@ -1,17 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { CalendarRange, Lock, TriangleAlert, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import NumberFlow from '@number-flow/react';
+import { Lock, TriangleAlert } from 'lucide-react';
 import { PageHeader } from '@/components/app-shell';
+import { STATUS_VAR } from '@/components/badges';
+import { RankChart, ShareChart, TrendChart, type Count } from '@/components/charts/charts';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Field, Input } from '@/components/ui/field';
 import { EmptyState, Skeleton } from '@/components/ui/misc';
 import { Select } from '@/components/ui/select';
+import { FilterTabs } from '@/components/ui/tabs';
 import { api, errorMessage } from '@/lib/api';
-import { RISK_LABEL, RISK_LEVELS, number } from '@/lib/format';
-import { cn } from '@/lib/utils';
-import { CountChart, type Count } from './count-chart';
+import { RISK_LABEL, RISK_LEVELS } from '@/lib/format';
 
 type Stats = {
   total: number;
@@ -36,46 +37,67 @@ type SiteStats = {
   notifications: { total: number; unread: number; riskAlerts: number };
 };
 
-type Filters = {
-  from?: string;
-  to?: string;
-  country?: string;
-  riskLevel?: string;
+type Filters = { from?: string; to?: string; country?: string; riskLevel?: string };
+
+const STATUS_COLORS = {
+  RECIBIDO: STATUS_VAR.RECIBIDO,
+  EN_REVISION: STATUS_VAR.EN_REVISION,
+  VALIDADO: STATUS_VAR.VALIDADO,
+  CANALIZADO: STATUS_VAR.CANALIZADO,
+  RECHAZADO: STATUS_VAR.RECHAZADO,
 };
 
-type Tab = 'reportes' | 'plataforma';
+const ACCOUNT_COLORS = {
+  ACTIVO: STATUS_VAR.ACTIVO,
+  SUSPENDIDO: STATUS_VAR.SUSPENDIDO,
+  ELIMINADA: 'var(--risk-0)',
+};
 
-const count = (counts: Count[], name: string) =>
-  counts.find((c) => c.name === name)?.count ?? 0;
+const of = (counts: Count[], name: string) => counts.find((c) => c.name === name)?.count ?? 0;
 
 export default function StatsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
-  const [filters, setFilters] = useState<Filters>({});
-  const [riskLevel, setRiskLevel] = useState('ALL');
-  const [error, setError] = useState('');
   const [site, setSite] = useState<SiteStats | null>(null);
+  const [error, setError] = useState('');
   const [siteError, setSiteError] = useState('');
-  const [tab, setTab] = useState<Tab>('reportes');
-  const [formKey, setFormKey] = useState(0);
+  const [tab, setTab] = useState('reportes');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [country, setCountry] = useState('');
+  const [riskLevel, setRiskLevel] = useState('ALL');
+  const [filters, setFilters] = useState<Filters>({});
 
-  const load = useCallback(() => {
-    return api
+  // Los filtros aplican solos; el texto espera a que se deje de escribir.
+  // Un filtro vacío no se manda: el servidor rechaza `from=` sin valor.
+  useEffect(() => {
+    const timer = setTimeout(
+      () =>
+        setFilters({
+          from: from || undefined,
+          // El campo da solo el día; se manda su último segundo para que
+          // "hasta el 30" incluya los reportes del 30.
+          to: to ? to + 'T23:59:59' : undefined,
+          country: country.trim() || undefined,
+          riskLevel: riskLevel === 'ALL' ? undefined : riskLevel,
+        }),
+      country ? 300 : 0,
+    );
+    return () => clearTimeout(timer);
+  }, [from, to, country, riskLevel]);
+
+  useEffect(() => {
+    api
       .get<Stats>('/stats', { params: filters })
       .then(({ data }) => {
         setStats(data);
         setError('');
       })
       .catch((e) => setError(errorMessage(e)));
-  }, [filters]);
-
-  const loadSite = useCallback(() => {
     // Las métricas de la plataforma solo aceptan el periodo, no el país ni
     // el riesgo. Su error va aparte: la Policía ve los reportes pero no
     // esta parte, y eso no debe tapar lo demás.
-    return api
-      .get<SiteStats>('/stats/site', {
-        params: { from: filters.from, to: filters.to },
-      })
+    api
+      .get<SiteStats>('/stats/site', { params: { from: filters.from, to: filters.to } })
       .then(({ data }) => {
         setSite(data);
         setSiteError('');
@@ -86,215 +108,107 @@ export default function StatsPage() {
       });
   }, [filters]);
 
-  useEffect(() => {
-    load();
-    loadSite();
-  }, [load, loadSite]);
-
-  function handleFilters(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const from = String(form.get('from'));
-    const to = String(form.get('to'));
-    // Un filtro vacío no se manda: el servidor rechaza `from=` sin valor.
-    setFilters({
-      from: from || undefined,
-      // El campo da solo el día; se manda su último segundo para que
-      // "hasta el 30" incluya los reportes del 30.
-      to: to ? to + 'T23:59:59' : undefined,
-      country: String(form.get('country')).trim() || undefined,
-      riskLevel: riskLevel === 'ALL' ? undefined : riskLevel,
-    });
-  }
-
-  const filtered = Object.values(filters).some(Boolean);
-  const approval = stats?.approvalRate ?? null;
-  const pending = stats
-    ? count(stats.byStatus, 'RECIBIDO') + count(stats.byStatus, 'EN_REVISION')
-    : 0;
+  const filtered = Boolean(from || to || country || riskLevel !== 'ALL');
+  const pending = stats ? of(stats.byStatus, 'RECIBIDO') + of(stats.byStatus, 'EN_REVISION') : 0;
+  const confirmed = stats ? of(stats.byStatus, 'VALIDADO') + of(stats.byStatus, 'CANALIZADO') : 0;
 
   return (
     <>
-      <PageHeader
-        eyebrow="Panorama"
-        title="Estadísticas"
-        description="Qué se denuncia, qué tan grave es y cómo se usa la plataforma."
-      />
+      <PageHeader title="Estadísticas" description="Qué se denuncia, qué tan grave es y cómo se usa la plataforma." />
 
-      <form
-        key={formKey}
-        onSubmit={handleFilters}
-        className="mb-8 grid animate-rise items-end gap-3 rounded-xl border border-line bg-surface/70 p-4 shadow-card sm:grid-cols-2 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto]"
-      >
-        <Field label="Creados desde">
-          <Input name="from" type="date" />
+      <div className="mb-6 flex flex-wrap items-end gap-3">
+        <Field label="Desde" className="w-40">
+          <Input type="date" value={from} max={to || undefined} onChange={(event) => setFrom(event.target.value)} />
         </Field>
-        <Field label="Creados hasta">
-          <Input name="to" type="date" />
+        <Field label="Hasta" className="w-40">
+          <Input type="date" value={to} min={from || undefined} onChange={(event) => setTo(event.target.value)} />
         </Field>
-        <Field label="País del denunciante">
-          <Input name="country" placeholder="México" />
+        <Field label="País del denunciante" className="w-44">
+          <Input value={country} placeholder="Cualquiera" onChange={(event) => setCountry(event.target.value)} />
         </Field>
-        <div className="grid gap-1.5">
-          <span className="eyebrow">Nivel de riesgo</span>
+        <div className="grid w-40 gap-1.5">
+          <span className="text-[13px] font-medium text-ink-2">Riesgo</span>
           <Select
             aria-label="Nivel de riesgo"
             value={riskLevel}
             onValueChange={setRiskLevel}
             options={[
-              { value: 'ALL', label: 'Todos' },
+              { value: 'ALL', label: 'Cualquiera' },
               ...RISK_LEVELS.map((level) => ({ value: level, label: RISK_LABEL[level] })),
             ]}
           />
         </div>
-        <div className="flex gap-2">
-          <Button type="submit">
-            <CalendarRange />
-            Aplicar
+        {filtered && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setFrom('');
+              setTo('');
+              setCountry('');
+              setRiskLevel('ALL');
+            }}
+          >
+            Quitar filtros
           </Button>
-          {filtered && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Quitar filtros"
-              onClick={() => {
-                setRiskLevel('ALL');
-                setFilters({});
-                setFormKey((k) => k + 1);
-              }}
-            >
-              <X />
-            </Button>
-          )}
-        </div>
-      </form>
-
-      {/* Las tres cifras que resumen la mesa: cuánto hay, cuánto falta y cuánto resultó cierto. */}
-      <div className="stagger mb-8 grid gap-4 md:grid-cols-[1.25fr_1fr_1fr]">
-        <Card className="overflow-hidden bg-ink p-6 text-paper dark:bg-sunk dark:text-ink">
-          <svg
-            aria-hidden
-            viewBox="0 0 200 200"
-            className="pointer-events-none absolute -right-10 -bottom-16 size-56 opacity-10"
-          >
-            <ellipse cx="100" cy="100" rx="56" ry="80" fill="none" stroke="currentColor" strokeWidth="14" />
-            <path d="M36 172 164 28" stroke="var(--signal)" strokeWidth="16" strokeLinecap="round" />
-          </svg>
-          <span className="eyebrow !text-paper/60 dark:!text-muted">Reportes{filtered && ' · filtrados'}</span>
-          <span className="display tnum mt-3 block text-7xl">
-            {stats ? number.format(stats.total) : '–'}
-          </span>
-          <span className="mt-2 block text-sm text-paper/70 dark:text-ink-soft">
-            recibidos de la comunidad
-          </span>
-        </Card>
-
-        <Card className="p-6">
-          <span className="eyebrow">Por revisar</span>
-          <span className="display tnum mt-3 block text-6xl">
-            {stats ? number.format(pending) : '–'}
-          </span>
-          <span className="mt-2 block text-sm text-muted">
-            {stats && stats.total > 0
-              ? `${Math.round((pending / stats.total) * 100)} % del total sigue abierto`
-              : 'recibidos o en revisión'}
-          </span>
-        </Card>
-
-        <Card className="p-6">
-          <span className="eyebrow">Tasa de aprobación</span>
-          <span className="display tnum mt-3 block text-6xl">
-            {approval === null ? '–' : Math.round(approval * 100)}
-            {approval !== null && <span className="text-3xl text-muted"> %</span>}
-          </span>
-          {/* La barra repite la cifra; no es el único lugar donde se lee. */}
-          <span aria-hidden className="mt-4 block h-1.5 overflow-hidden rounded-full bg-ink/10">
-            <span
-              className="block h-full rounded-full bg-signal transition-[width] duration-700"
-              style={{ width: `${Math.round((approval ?? 0) * 100)}%` }}
-            />
-          </span>
-          <span className="mt-2 block text-sm text-muted">
-            {approval === null
-              ? 'Aún no hay reportes resueltos'
-              : 'de los resueltos fueron validados'}
-          </span>
-        </Card>
+        )}
       </div>
 
-      <div role="tablist" aria-label="Vista" className="mb-6 inline-flex animate-rise rounded-lg border border-line-strong bg-sunk p-1">
-        {(
-          [
-            ['reportes', 'Reportes'],
-            ['plataforma', 'Plataforma'],
-          ] as [Tab, string][]
-        ).map(([value, text]) => (
-          <button
-            key={value}
-            role="tab"
-            type="button"
-            aria-selected={tab === value}
-            onClick={() => setTab(value)}
-            className={cn(
-              'h-9 rounded-md px-4 text-sm transition-colors',
-              tab === value
-                ? 'bg-surface font-medium text-ink shadow-card'
-                : 'text-muted hover:text-ink',
-            )}
-          >
-            {text}
-          </button>
-        ))}
-      </div>
+      {/* Las cifras del periodo en una sola franja: se leen juntas, no como tarjetas sueltas. */}
+      <dl className="mb-8 grid grid-cols-2 divide-line rounded-xl bg-surface shadow-card max-sm:divide-y sm:grid-cols-4 sm:divide-x">
+        <Figure label={filtered ? 'Reportes con estos filtros' : 'Reportes'} value={stats?.total} />
+        <Figure label="Por revisar" value={stats ? pending : undefined} />
+        <Figure label="Validados o canalizados" value={stats ? confirmed : undefined} />
+        <Figure
+          label="Tasa de aprobación"
+          value={stats ? (stats.approvalRate === null ? null : stats.approvalRate) : undefined}
+          percent
+          hint={stats?.approvalRate === null ? 'Aún no hay reportes resueltos' : undefined}
+        />
+      </dl>
+
+      <FilterTabs
+        aria-label="Vista"
+        value={tab}
+        onValueChange={setTab}
+        items={[
+          { value: 'reportes', label: 'Reportes' },
+          { value: 'plataforma', label: 'Plataforma' },
+        ]}
+      />
 
       {tab === 'reportes' && (
-        <div role="tabpanel">
+        <div className="pt-5">
           {error && (
-            <Card>
-              <EmptyState
-                tone="danger"
-                icon={<TriangleAlert />}
-                title="No se pudieron cargar las estadísticas"
-                description={error}
-                action={
-                  <Button variant="outline" onClick={() => load()}>
-                    Reintentar
-                  </Button>
-                }
-              />
-            </Card>
+            <EmptyState
+              tone="danger"
+              icon={<TriangleAlert />}
+              title="No se pudieron cargar las estadísticas"
+              description={error}
+              action={<Button onClick={() => setFilters({ ...filters })}>Reintentar</Button>}
+            />
           )}
           {!error && !stats && <ChartsSkeleton />}
           {!error && stats && (
-            <div className="stagger grid items-start gap-4 lg:grid-cols-2">
-              <CountChart title="Por estado" counts={stats.byStatus} />
-              <CountChart title="Por nivel de riesgo" counts={stats.byRiskLevel} kind="risk" />
-              <CountChart title="Por tipo de fraude" counts={stats.byFraudType} />
-              <CountChart title="Por país" counts={stats.byCountry} />
+            <div className="arrive grid items-start gap-4 lg:grid-cols-2">
               <div className="lg:col-span-2">
-                <CountChart title="Reportes por mes" counts={stats.byMonth} kind="months" />
+                <TrendChart title="Reportes por mes" counts={stats.byMonth} />
               </div>
+              <ShareChart title="Por estado" counts={stats.byStatus} colors={STATUS_COLORS} />
+              <RankChart title="Por nivel de riesgo" counts={stats.byRiskLevel} kind="risk" />
+              <RankChart title="Por tipo de fraude" counts={stats.byFraudType} />
+              <RankChart title="Por país" counts={stats.byCountry} />
             </div>
           )}
         </div>
       )}
 
       {tab === 'plataforma' && (
-        <div role="tabpanel" className="grid gap-4">
-          {siteError && (
-            <Card>
-              <EmptyState
-                icon={<Lock />}
-                title="Esta parte no está disponible para tu rol"
-                description={siteError}
-              />
-            </Card>
-          )}
+        <div className="pt-5">
+          {siteError && <EmptyState icon={<Lock />} title="Esta parte no está disponible para tu rol" description={siteError} />}
           {!siteError && !site && <ChartsSkeleton />}
           {site && (
-            <>
-              <dl className="stagger grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line shadow-card lg:grid-cols-4">
+            <div className="arrive grid gap-4">
+              <dl className="grid grid-cols-2 gap-x-8 gap-y-5 rounded-xl bg-surface p-4 shadow-card sm:grid-cols-4">
                 {(
                   [
                     ['Cuentas registradas', site.users.total],
@@ -307,21 +221,23 @@ export default function StatsPage() {
                     ['Alertas de riesgo de una URL', site.notifications.riskAlerts],
                   ] as [string, number][]
                 ).map(([text, value]) => (
-                  <div key={text} className="grid gap-2 bg-surface p-5">
-                    <dt className="eyebrow">{text}</dt>
-                    <dd className="display tnum text-4xl">{number.format(value)}</dd>
+                  <div key={text} className="grid gap-0.5">
+                    <dt className="text-[13px] text-muted">{text}</dt>
+                    <dd className="text-lg font-semibold tracking-[-0.01em]">
+                      <NumberFlow value={value} locales="es-MX" />
+                    </dd>
                   </div>
                 ))}
               </dl>
-              <div className="stagger grid items-start gap-4 lg:grid-cols-2">
-                <CountChart title="Cuentas por rol" counts={site.users.byRole} />
-                <CountChart title="Cuentas por estado" counts={site.users.byAccountStatus} />
-                <CountChart title="Cuentas por país" counts={site.users.byCountry} />
-                <CountChart title="URLs por nivel de riesgo" counts={site.urls.byRiskLevel} kind="risk" />
-                <CountChart title="Registros por mes" counts={site.users.byMonth} kind="months" />
-                <CountChart title="Consultas por mes" counts={site.lookups.byMonth} kind="months" />
+              <div className="grid items-start gap-4 lg:grid-cols-2">
+                <TrendChart title="Registros por mes" counts={site.users.byMonth} />
+                <TrendChart title="Consultas de riesgo por mes" counts={site.lookups.byMonth} />
+                <ShareChart title="Cuentas por estado" counts={site.users.byAccountStatus} colors={ACCOUNT_COLORS} />
+                <RankChart title="Cuentas por rol" counts={site.users.byRole} />
+                <RankChart title="URLs por nivel de riesgo" counts={site.urls.byRiskLevel} kind="risk" />
+                <RankChart title="Cuentas por país" counts={site.users.byCountry} />
               </div>
-            </>
+            </div>
           )}
         </div>
       )}
@@ -329,12 +245,45 @@ export default function StatsPage() {
   );
 }
 
+/** Una cifra de la franja. `undefined` = cargando; `null` = no aplica todavía. */
+function Figure({
+  label,
+  value,
+  percent = false,
+  hint,
+}: {
+  label: string;
+  value: number | null | undefined;
+  percent?: boolean;
+  hint?: string;
+}) {
+  return (
+    <div className="grid gap-1 p-4">
+      <dt className="text-[13px] text-muted">{label}</dt>
+      <dd className="text-2xl font-semibold tracking-[-0.02em]">
+        {value === undefined ? (
+          <Skeleton className="my-1 h-6 w-14" />
+        ) : value === null ? (
+          <span className="text-muted">—</span>
+        ) : (
+          <NumberFlow
+            value={value}
+            locales="es-MX"
+            format={percent ? { style: 'percent', maximumFractionDigits: 0 } : undefined}
+          />
+        )}
+      </dd>
+      {hint && <dd className="text-xs text-muted">{hint}</dd>}
+    </div>
+  );
+}
+
 function ChartsSkeleton() {
   return (
     <div aria-busy aria-label="Cargando estadísticas" className="grid gap-4 lg:grid-cols-2">
-      {Array.from({ length: 4 }, (_, i) => (
-        <Skeleton key={i} className="h-56 rounded-xl" />
-      ))}
+      <Skeleton className="h-64 rounded-xl lg:col-span-2" />
+      <Skeleton className="h-44 rounded-xl" />
+      <Skeleton className="h-44 rounded-xl" />
     </div>
   );
 }

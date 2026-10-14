@@ -1,19 +1,15 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ArrowRight, KeyRound, ShieldCheck } from 'lucide-react';
+import { OTPInput, type SlotProps } from 'input-otp';
+import { ArrowLeft } from 'lucide-react';
 import { Brand } from '@/components/brand';
-import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { InlineAlert } from '@/components/ui/misc';
-import {
-  errorMessage,
-  login,
-  verifyCode,
-  type TwoFactorChallenge,
-} from '@/lib/api';
+import { errorMessage, login, verifyCode, type TwoFactorChallenge } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -21,6 +17,8 @@ export default function LoginPage() {
   const [sending, setSending] = useState(false);
   // Con verificación en dos pasos el login regresa un desafío en vez de tokens.
   const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null);
+  const [code, setCode] = useState('');
+  const codeForm = useRef<HTMLFormElement>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,10 +26,7 @@ export default function LoginPage() {
     setError('');
     setSending(true);
     try {
-      const pending = await login(
-        String(form.get('email')),
-        String(form.get('password')),
-      );
+      const pending = await login(String(form.get('email')), String(form.get('password')));
       if (pending) {
         setChallenge(pending);
         setSending(false);
@@ -46,172 +41,144 @@ export default function LoginPage() {
 
   async function handleCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!challenge) return;
-    const form = new FormData(event.currentTarget);
+    if (!challenge || code.length < 6) return;
     setError('');
     setSending(true);
     try {
-      await verifyCode(challenge.challengeId, String(form.get('code')));
+      await verifyCode(challenge.challengeId, code);
       router.replace('/');
     } catch (e) {
       setError(errorMessage(e));
+      setCode('');
       setSending(false);
     }
   }
 
   return (
-    <div className="relative z-10 grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
-      {/* Portada del expediente: siempre en tinta, sea cual sea el tema. */}
-      <aside className="relative hidden overflow-hidden bg-[#0a1330] text-[#f4efe3] lg:flex lg:flex-col lg:justify-between lg:p-14">
-        <svg
-          aria-hidden
-          viewBox="0 0 600 600"
-          className="pointer-events-none absolute -right-40 -bottom-48 size-[46rem] opacity-[0.07]"
-        >
-          <ellipse cx="300" cy="300" rx="170" ry="240" fill="none" stroke="currentColor" strokeWidth="44" />
-          <path d="M110 520 490 80" stroke="#f5a623" strokeWidth="48" strokeLinecap="round" />
-        </svg>
-        <div
-          aria-hidden
-          className="absolute inset-0 opacity-40"
-          style={{
-            backgroundImage:
-              'linear-gradient(#ffffff0a 1px, transparent 1px), linear-gradient(90deg, #ffffff0a 1px, transparent 1px)',
-            backgroundSize: '56px 56px',
-            maskImage: 'radial-gradient(ellipse at 20% 10%, black, transparent 70%)',
-          }}
-        />
-
-        <div className="relative flex items-center gap-3 animate-fade">
-          <svg viewBox="0 0 40 40" aria-hidden className="size-9">
-            <rect width="40" height="40" rx="10" fill="#f4efe3" />
-            <ellipse cx="20" cy="20" rx="8" ry="11" fill="none" stroke="#0a1330" strokeWidth="2.6" />
-            <path d="M11 31 29 9" stroke="#f5a623" strokeWidth="3" strokeLinecap="round" />
+    <div className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      {/* Portada: siempre en el azul de la app, sea cual sea el tema. */}
+      <aside className="relative hidden overflow-hidden bg-[#0a1330] text-[#f1f3f9] lg:flex lg:flex-col lg:justify-between lg:p-12">
+        <span className="flex items-center gap-2">
+          <svg viewBox="0 0 24 24" aria-hidden className="size-6" fill="none">
+            <ellipse cx="12" cy="12" rx="6" ry="8.5" stroke="currentColor" strokeWidth="2" />
+            <path d="M5.5 19.5 18.5 4.5" stroke="#f5a623" strokeWidth="2.25" strokeLinecap="round" />
           </svg>
-          <span className="display text-[1.35rem]">
-            Zero<span className="italic text-[#f5a623]">Scam</span>
-          </span>
-        </div>
+          <span className="text-[15px] font-semibold tracking-[-0.02em]">ZeroScam</span>
+        </span>
 
-        <div className="stagger relative grid max-w-xl gap-6">
-          <span className="eyebrow flex items-center gap-2 !text-[#f5a623]">
-            <span aria-hidden className="h-px w-8 bg-[#f5a623]" />
-            Mesa de control
-          </span>
-          <h1 className="display text-6xl xl:text-7xl">
-            Cada reporte
-            <br />
-            es una <em className="text-[#f5a623]">pista</em>.
+        {/* El cero tachado se traza una vez al llegar: es lo primero que se ve y solo pasa aquí. */}
+        <svg aria-hidden viewBox="0 0 400 520" fill="none" className="login-mark pointer-events-none absolute top-[9%] right-[-2.5rem] h-[56%]">
+          <ellipse cx="200" cy="260" rx="150" ry="220" stroke="#18244f" strokeWidth="30" pathLength="1" />
+          <path d="M40 470 360 50" stroke="#f5a623" strokeWidth="30" strokeLinecap="round" pathLength="1" />
+        </svg>
+
+        <div className="relative grid max-w-md gap-4">
+          <h1 className="text-[44px] leading-[1.05] font-semibold tracking-[-0.035em]">
+            Cada reporte es una pista.
           </h1>
-          <p className="max-w-md text-[17px] leading-relaxed text-[#c5c6d3]">
-            Revisa lo que la comunidad denuncia, clasifica su riesgo y canaliza
-            lo que debe llegar a la Policía Cibernética.
+          <p className="max-w-sm text-base leading-relaxed text-[#bcc3d8]">
+            Revisa lo que la comunidad denuncia, clasifica su riesgo y canaliza lo que debe llegar a la Policía
+            Cibernética.
           </p>
         </div>
-
-        <dl className="relative grid grid-cols-3 gap-6 border-t border-[#ffffff1f] pt-6 animate-fade">
-          {[
-            ['01', 'Recibir', 'Entra el reporte con su evidencia.'],
-            ['02', 'Validar', 'Se revisa y se asigna el riesgo.'],
-            ['03', 'Canalizar', 'El expediente va a la autoridad.'],
-          ].map(([n, title, text]) => (
-            <div key={n} className="grid gap-1">
-              <dt className="font-mono text-xs text-[#f5a623]">{n}</dt>
-              <dd className="display text-xl">{title}</dd>
-              <dd className="text-[13px] leading-snug text-[#8c93ad]">{text}</dd>
-            </div>
-          ))}
-        </dl>
       </aside>
 
-      <main className="relative flex flex-col px-6 py-8 sm:px-12">
-        <div className="flex items-center justify-between">
-          <Brand className="lg:invisible" />
-          <ThemeToggle />
-        </div>
+      <main className="flex flex-col px-6 py-6 sm:px-10">
+        <Brand className="lg:invisible" />
 
-        <div className="m-auto w-full max-w-sm py-12">
+        <div className="m-auto w-full max-w-[21rem] py-10">
           {challenge ? (
-            <form key="code" onSubmit={handleCode} className="stagger grid gap-5">
-              <span className="grid size-11 place-items-center rounded-full border border-line-strong bg-surface">
-                <KeyRound className="size-5" />
-              </span>
-              <div className="grid gap-2">
-                <h2 className="display text-4xl">Segundo paso</h2>
-                <p className="text-[15px] leading-relaxed text-ink-soft">
-                  Escribe el código de 6 dígitos enviado a{' '}
-                  <span className="font-mono text-ink">{challenge.destination}</span>.
+            <form ref={codeForm} onSubmit={handleCode} className="arrive grid gap-5">
+              <div className="grid gap-1.5">
+                <h2 className="text-2xl font-semibold tracking-[-0.025em]">Código de verificación</h2>
+                <p className="text-sm leading-relaxed text-muted">
+                  Lo enviamos a <span className="font-medium text-ink-2">{challenge.destination}</span>. Dura 5 minutos.
                 </p>
               </div>
-              <Field label="Código de verificación">
-                <Input
-                  name="code"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  required
-                  autoFocus
-                  placeholder="000000"
-                  className="h-14 text-center font-mono text-2xl tracking-[0.5em] placeholder:tracking-[0.5em]"
-                />
-              </Field>
+              <OTPInput
+                name="code"
+                maxLength={6}
+                value={code}
+                onChange={setCode}
+                // Al completar los 6 dígitos se envía solo: no hace falta buscar el botón.
+                onComplete={() => codeForm.current?.requestSubmit()}
+                autoFocus
+                inputMode="numeric"
+                pattern="^[0-9]*$"
+                aria-label="Código de 6 dígitos"
+                containerClassName="flex items-center justify-between gap-2"
+                render={({ slots }) => (
+                  <>
+                    {slots.slice(0, 3).map((slot, index) => (
+                      <Slot key={index} {...slot} />
+                    ))}
+                    <span aria-hidden className="h-px w-3 shrink-0 bg-line-strong" />
+                    {slots.slice(3).map((slot, index) => (
+                      <Slot key={index + 3} {...slot} />
+                    ))}
+                  </>
+                )}
+              />
               {error && <InlineAlert>{error}</InlineAlert>}
-              <Button type="submit" size="lg" disabled={sending}>
-                {sending ? 'Verificando…' : 'Verificar y entrar'}
-                <ShieldCheck />
+              <Button type="submit" variant="primary" size="lg" loading={sending} disabled={code.length < 6}>
+                Verificar y entrar
               </Button>
               <Button
                 type="button"
                 variant="ghost"
                 onClick={() => {
                   setChallenge(null);
+                  setCode('');
                   setError('');
                 }}
               >
                 <ArrowLeft />
-                Volver
+                Usar otra cuenta
               </Button>
             </form>
           ) : (
-            <form key="login" onSubmit={handleSubmit} className="stagger grid gap-5">
-              <div className="grid gap-2">
-                <span className="eyebrow">Acceso del equipo</span>
-                <h2 className="display text-4xl">Inicia sesión</h2>
-                <p className="text-[15px] leading-relaxed text-ink-soft">
-                  Para Administración, Owner y Policía Cibernética.
-                </p>
+            <form onSubmit={handleSubmit} className="grid gap-5">
+              <div className="grid gap-1.5">
+                <h2 className="text-2xl font-semibold tracking-[-0.025em]">Inicia sesión</h2>
+                <p className="text-sm text-muted">Acceso para Administración, Owner y Policía Cibernética.</p>
               </div>
               <Field label="Correo">
                 <Input
                   name="email"
                   type="email"
                   autoComplete="email"
+                  spellCheck={false}
                   placeholder="nombre@zeroscam.mx"
                   required
                   autoFocus
+                  className="h-10"
                 />
               </Field>
               <Field label="Contraseña">
-                <Input
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="••••••••••"
-                  required
-                />
+                <Input name="password" type="password" autoComplete="current-password" required className="h-10" />
               </Field>
               {error && <InlineAlert>{error}</InlineAlert>}
-              <Button type="submit" size="lg" disabled={sending}>
-                {sending ? 'Entrando…' : 'Entrar'}
-                <ArrowRight />
+              <Button type="submit" variant="primary" size="lg" loading={sending}>
+                Entrar
               </Button>
             </form>
           )}
         </div>
-
-        <p className="eyebrow text-center">ZeroScam · Seguridad informática · 2026</p>
       </main>
     </div>
+  );
+}
+
+function Slot({ char, hasFakeCaret, isActive }: SlotProps) {
+  return (
+    <span
+      className={cn(
+        'relative grid h-12 w-full place-items-center rounded-lg border bg-surface font-mono text-lg font-medium transition-[border-color,box-shadow] duration-150',
+        isActive ? 'border-accent-ink ring-3 ring-accent/30' : 'border-line-strong',
+      )}
+    >
+      {char}
+      {hasFakeCaret && <span aria-hidden className="caret-blink absolute h-5 w-px bg-accent-ink" />}
+    </span>
   );
 }

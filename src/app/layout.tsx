@@ -3,7 +3,7 @@ import { Providers } from '@/components/providers';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: { default: 'ZeroScam — Mesa de control', template: '%s · ZeroScam' },
+  title: { default: 'ZeroScam — Administración', template: '%s · ZeroScam' },
   description: 'Revisión de reportes de fraude, cuentas y estadísticas de ZeroScam.',
 };
 

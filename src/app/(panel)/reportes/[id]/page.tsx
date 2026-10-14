@@ -3,40 +3,17 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import {
-  ArrowLeft,
-  Check,
-  Copy,
-  Download,
-  FileText,
-  Lock,
-  MapPin,
-  MessageSquare,
-  Paperclip,
-  ShieldAlert,
-  TriangleAlert,
-  Users,
-  VenetianMask,
-} from 'lucide-react';
+import { Dialog } from '@base-ui/react/dialog';
+import { AnimatePresence, motion } from 'motion/react';
+import { ArrowLeft, Check, Copy, Download, FileText, Lock, TriangleAlert, VenetianMask, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { RiskMeter, StatusBadge } from '@/components/badges';
-import { Button } from '@/components/ui/button';
-import { Card, CardBody, CardHeader } from '@/components/ui/card';
+import { Avatar, RiskMeter, StatusBadge, STATUS_VAR } from '@/components/badges';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Field, Textarea } from '@/components/ui/field';
 import { EmptyState, Skeleton } from '@/components/ui/misc';
 import { API_URL, api, errorMessage } from '@/lib/api';
-import {
-  RISK_LABEL,
-  RISK_LEVELS,
-  RISK_ORDER,
-  STATUS_LABEL,
-  defang,
-  folio,
-  formatDateTime,
-  initials,
-  timeAgo,
-} from '@/lib/format';
-import { isStaff, useMe } from '@/lib/session';
+import { RISK_LABEL, RISK_LEVELS, RISK_ORDER, STATUS_LABEL, defang, folio, formatDateTime, timeAgo } from '@/lib/format';
+import { isStaff, useSession } from '@/lib/session';
 import { cn } from '@/lib/utils';
 
 type Report = {
@@ -81,26 +58,23 @@ const NEXT: Record<string, string[]> = {
   CANALIZADO: [],
 };
 
-const STATUS_VAR: Record<string, string> = {
-  RECIBIDO: 'var(--st-recibido)',
-  EN_REVISION: 'var(--st-revision)',
-  VALIDADO: 'var(--st-validado)',
-  RECHAZADO: 'var(--st-rechazado)',
-  CANALIZADO: 'var(--st-canalizado)',
-};
+/** El camino normal de un reporte; RECHAZADO lo corta donde esté. */
+const PIPELINE = ['RECIBIDO', 'EN_REVISION', 'VALIDADO', 'CANALIZADO'];
 
+const isPending = (status: string) => status === 'RECIBIDO' || status === 'EN_REVISION';
 const isImage = (path: string) => /\.(jpe?g|png|gif|webp)$/i.test(path);
 
 export default function ReportPage() {
   const { id } = useParams<{ id: string }>();
-  const me = useMe();
+  const { me, pending, setPending } = useSession();
   const canModerate = isStaff(me);
   const [report, setReport] = useState<Report | null>(null);
   const [extra, setExtra] = useState<Extra | null>(null);
   const [error, setError] = useState('');
-  const [sending, setSending] = useState(false);
+  const [sending, setSending] = useState<'status' | 'risk' | 'export' | null>(null);
   const [nextStatus, setNextStatus] = useState('');
   const [risk, setRisk] = useState('');
+  const [preview, setPreview] = useState<string | null>(null);
 
   const load = useCallback(() => {
     // La vista de la app es un extra: si el rol no puede pedirla, no pasa nada.
@@ -114,36 +88,43 @@ export default function ReportPage() {
         setReport(data);
         setRisk(data.riskLevel);
         setNextStatus(NEXT[data.status]?.[0] ?? '');
+        return data;
       })
-      .catch((e) => setError(errorMessage(e)));
+      .catch((e) => {
+        setError(errorMessage(e));
+        return null;
+      });
   }, [id]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  async function send(path: string, body: object) {
-    setSending(true);
+  async function send(kind: 'status' | 'risk', body: object) {
+    const before = report?.status;
+    setSending(kind);
     try {
-      const { data } = await api.patch<Report>(`/reports/${id}/${path}`, body);
+      const { data } = await api.patch<Report>(`/reports/${id}/${kind}`, body);
       toast.success(data.message ?? 'Cambio guardado');
       // El PATCH no regresa `history` ni `reporter`: se vuelve a pedir el detalle.
-      await load();
+      const fresh = await load();
+      // La cuenta de pendientes de la barra lateral sigue al cambio.
+      if (fresh && before && pending !== null && isPending(before) !== isPending(fresh.status)) {
+        setPending(Math.max(0, pending + (isPending(fresh.status) ? 1 : -1)));
+      }
     } catch (e) {
       toast.error(errorMessage(e));
     }
-    setSending(false);
+    setSending(null);
   }
 
   async function handleExport() {
-    setSending(true);
+    setSending('export');
     try {
       const { data } = await api.get<{ folio: string }>(`/reports/${id}/export`);
       // Un enlace normal no puede mandar el Bearer: el expediente se pide
       // con `api` y el archivo se arma aquí con lo que regresó.
-      const file = new Blob([JSON.stringify(data, null, 2)], {
-        type: 'application/json',
-      });
+      const file = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(file);
       link.download = `${data.folio}.json`;
@@ -153,7 +134,7 @@ export default function ReportPage() {
     } catch (e) {
       toast.error(errorMessage(e));
     }
-    setSending(false);
+    setSending(null);
   }
 
   function handleStatus(event: FormEvent<HTMLFormElement>) {
@@ -169,19 +150,17 @@ export default function ReportPage() {
 
   if (error) {
     return (
-      <Card>
-        <EmptyState
-          tone="danger"
-          icon={<TriangleAlert />}
-          title="No se pudo abrir el reporte"
-          description={error}
-          action={
-            <Button asChild variant="outline">
-              <Link href="/">Volver a la bandeja</Link>
-            </Button>
-          }
-        />
-      </Card>
+      <EmptyState
+        tone="danger"
+        icon={<TriangleAlert />}
+        title="No se pudo abrir el reporte"
+        description={error}
+        action={
+          <Link href="/" className={buttonVariants()}>
+            Volver a los reportes
+          </Link>
+        }
+      />
     );
   }
 
@@ -192,258 +171,211 @@ export default function ReportPage() {
   const type = extra?.otherType ?? report.fraudType;
 
   return (
-    <>
+    <div className="arrive">
       <Link
         href="/"
-        className="group mb-6 inline-flex animate-fade items-center gap-2 text-sm text-muted hover:text-ink"
+        className="-ml-1.5 mb-5 inline-flex h-7 items-center gap-1.5 rounded-md px-1.5 text-[13px] text-muted outline-none transition-colors duration-150 hover:text-ink focus-visible:outline-2 focus-visible:outline-accent-ink"
       >
-        <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-0.5" />
-        Bandeja de reportes
+        <ArrowLeft className="size-3.5" />
+        Reportes
       </Link>
 
-      <header className="mb-8 grid animate-rise gap-4">
-        <span className="eyebrow flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span aria-hidden className="h-px w-6 bg-signal" />
-          <span className="text-ink">{folio(report.id, report.createdAt)}</span>
+      <header className="mb-8 grid gap-2">
+        <h1 className="max-w-[28ch] text-[28px] leading-[1.15] font-semibold tracking-[-0.03em]">
+          {extra?.title ?? report.fraudType}
+        </h1>
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted">
+          <span className="font-mono text-xs">{folio(report.id, report.createdAt)}</span>
           <span aria-hidden>·</span>
-          {type}
-        </span>
-        <h1 className="display max-w-3xl text-4xl sm:text-5xl">{extra?.title ?? report.fraudType}</h1>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-ink-soft">
-          <StatusBadge status={report.status} />
-          <RiskMeter level={report.riskLevel} />
+          <span>{type}</span>
           {extra?.city && (
-            <span className="flex items-center gap-1.5">
-              <MapPin className="size-3.5 text-muted" />
-              {extra.city}
-            </span>
+            <>
+              <span aria-hidden>·</span>
+              <span>{extra.city}</span>
+            </>
           )}
-          {extra && extra.confirmations > 0 && (
-            <span className="flex items-center gap-1.5" title="Personas que dijeron «Yo también»">
-              <Users className="size-3.5 text-muted" />
-              {extra.confirmations}
-            </span>
-          )}
-          {extra && extra.comments > 0 && (
-            <span className="flex items-center gap-1.5">
-              <MessageSquare className="size-3.5 text-muted" />
-              {extra.comments}
-            </span>
-          )}
-          <span className="text-muted">Recibido {timeAgo(report.createdAt)}</span>
-        </div>
+          <span aria-hidden>·</span>
+          <time dateTime={report.createdAt}>recibido {timeAgo(report.createdAt)}</time>
+        </p>
       </header>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
-        <div className="stagger grid gap-6">
-          <Card>
-            <CardHeader eyebrow="Relato" title="Qué pasó" />
-            <CardBody className="grid gap-5">
-              <p className="max-w-prose text-[15px] leading-[1.7] whitespace-pre-line text-ink">
-                {report.description}
-              </p>
-              <dl className="grid gap-x-8 gap-y-3 border-t border-line pt-4 sm:grid-cols-2">
-                <Datum label="Ocurrió" value={formatDateTime(report.incidentDate)} />
-                <Datum label="Se reportó" value={formatDateTime(report.createdAt)} />
-              </dl>
-            </CardBody>
-          </Card>
+      <div className="grid items-start gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-w-0">
+          <Pipeline status={report.status} />
+
+          <Section title="Qué pasó">
+            <p className="max-w-[68ch] text-[15px] leading-[1.65] whitespace-pre-line">{report.description}</p>
+            <dl className="mt-5 flex flex-wrap gap-x-10 gap-y-3">
+              <Fact label="Ocurrió" value={formatDateTime(report.incidentDate)} />
+              <Fact label="Se reportó" value={formatDateTime(report.createdAt)} />
+              {extra && extra.confirmations > 0 && (
+                <Fact label="También les pasó" value={`${extra.confirmations} ${extra.confirmations === 1 ? 'persona' : 'personas'}`} />
+              )}
+              {extra && extra.comments > 0 && <Fact label="Comentarios" value={String(extra.comments)} />}
+            </dl>
+          </Section>
 
           {(report.urls.length > 0 || extra?.suspiciousText) && (
-            <Card>
-              <CardHeader
-                eyebrow="No abrir"
-                title={report.urls.length > 0 ? 'Enlaces reportados' : 'Dato reportado'}
-              />
-              <CardBody className="grid gap-2">
+            <Section
+              title={report.urls.length > 0 ? 'Enlaces reportados' : 'Dato reportado'}
+              note={report.urls.length > 0 ? 'Desactivados para que nadie los abra por accidente' : undefined}
+            >
+              <ul className="grid gap-1.5">
                 {report.urls.map((url) => (
-                  <DefangedUrl key={url} url={url} />
+                  <li key={url}>
+                    <DefangedUrl url={url} />
+                  </li>
                 ))}
-                {extra?.suspiciousText && (
-                  <p className="rounded-md border border-line bg-sunk px-3 py-2.5 font-mono text-[13px] leading-relaxed break-words">
-                    {extra.suspiciousText}
-                  </p>
-                )}
-                {report.urls.length > 0 && (
-                  <p className="mt-1 flex items-center gap-1.5 text-xs text-muted">
-                    <ShieldAlert className="size-3.5" />
-                    Se muestran desactivados para que nadie los abra por accidente.
-                  </p>
-                )}
-              </CardBody>
-            </Card>
+              </ul>
+              {extra?.suspiciousText && (
+                <p className="rounded-lg bg-sunk px-3 py-2.5 font-mono text-[13px] leading-relaxed break-words">
+                  {extra.suspiciousText}
+                </p>
+              )}
+            </Section>
           )}
 
-          <Card>
-            <CardHeader
-              eyebrow="Pruebas"
-              title="Evidencia"
-              action={
-                <span className="eyebrow">
-                  {report.evidenceUrls.length}{' '}
-                  {report.evidenceUrls.length === 1 ? 'archivo' : 'archivos'}
-                </span>
-              }
-            />
-            <CardBody>
-              {report.evidenceUrls.length === 0 ? (
-                <p className="flex items-center gap-2 text-sm text-muted">
-                  <Paperclip className="size-4" />
-                  El denunciante no adjuntó archivos.
-                </p>
-              ) : (
-                <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {report.evidenceUrls.map((path) => (
-                    <li key={path}>
-                      <a
-                        href={API_URL + path}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="group block overflow-hidden rounded-lg border border-line bg-sunk transition-[border-color,box-shadow] hover:border-ink/40 hover:shadow-card"
-                      >
-                        <span className="grid aspect-[4/3] place-items-center overflow-hidden">
-                          {isImage(path) ? (
-                            // eslint-disable-next-line @next/next/no-img-element -- el archivo vive en la API, fuera del optimizador de Next
-                            <img
-                              src={API_URL + path}
-                              alt="Evidencia adjunta al reporte"
-                              loading="lazy"
-                              className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                            />
-                          ) : (
-                            <FileText className="size-8 text-muted" />
-                          )}
-                        </span>
-                        <span className="block truncate border-t border-line bg-surface px-3 py-2 font-mono text-[11px] text-ink-soft">
-                          {path.replace('/uploads/', '')}
-                        </span>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader eyebrow="Bitácora" title="Historial" />
-            <CardBody>
-              {!report.history || report.history.length === 0 ? (
-                <p className="text-sm text-muted">Sin cambios todavía.</p>
-              ) : (
-                <ol className="relative grid gap-5 before:absolute before:top-2 before:bottom-2 before:left-[5px] before:w-px before:bg-line-strong">
-                  {report.history.map((entry, index) => (
-                    <li key={index} className="relative grid gap-1 pl-7">
-                      <span
-                        aria-hidden
-                        className="absolute top-1.5 left-0 size-[11px] rounded-full border-2 border-surface"
-                        style={{ background: STATUS_VAR[entry.toStatus] ?? 'var(--muted)' }}
-                      />
-                      <span className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                        {entry.fromStatus && entry.fromStatus !== entry.toStatus && (
-                          <span className="text-muted">
-                            {STATUS_LABEL[entry.fromStatus] ?? entry.fromStatus} →
-                          </span>
+          <Section
+            title="Evidencia"
+            note={report.evidenceUrls.length > 0 ? `${report.evidenceUrls.length} ${report.evidenceUrls.length === 1 ? 'archivo' : 'archivos'}` : undefined}
+          >
+            {report.evidenceUrls.length === 0 ? (
+              <p className="text-sm text-muted">El denunciante no adjuntó archivos.</p>
+            ) : (
+              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {report.evidenceUrls.map((path) => {
+                  const name = path.replace('/uploads/', '');
+                  const thumb = (
+                    <>
+                      <span className="grid aspect-[4/3] place-items-center overflow-hidden rounded-lg bg-sunk outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10">
+                        {isImage(path) ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- el archivo vive en la API, fuera del optimizador de Next
+                          <img src={API_URL + path} alt="" loading="lazy" className="size-full object-cover" />
+                        ) : (
+                          <FileText className="size-6 text-muted" />
                         )}
-                        <strong className="font-medium">
-                          {STATUS_LABEL[entry.toStatus] ?? entry.toStatus}
-                        </strong>
-                        <time dateTime={entry.changedAt} className="tnum text-xs text-muted">
-                          {formatDateTime(entry.changedAt)}
-                        </time>
                       </span>
-                      {entry.observations && (
-                        <span className="text-sm leading-relaxed text-ink-soft">
-                          {entry.observations}
-                        </span>
+                      <span className="mt-1.5 block truncate font-mono text-[11px] text-muted">{name}</span>
+                    </>
+                  );
+                  const shared =
+                    'block w-full rounded-lg text-left outline-none transition-transform duration-150 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-ink';
+                  return (
+                    <li key={path}>
+                      {isImage(path) ? (
+                        <button type="button" className={shared} aria-label={`Ver evidencia ${name}`} onClick={() => setPreview(path)}>
+                          {thumb}
+                        </button>
+                      ) : (
+                        <a href={API_URL + path} target="_blank" rel="noreferrer" className={shared}>
+                          {thumb}
+                        </a>
                       )}
                     </li>
-                  ))}
-                </ol>
-              )}
-            </CardBody>
-          </Card>
+                  );
+                })}
+              </ul>
+            )}
+          </Section>
+
+          <Section title="Historial">
+            {!report.history || report.history.length === 0 ? (
+              <p className="text-sm text-muted">Sin cambios todavía.</p>
+            ) : (
+              <ol className="relative grid gap-4 before:absolute before:top-2 before:bottom-2 before:left-[3px] before:w-px before:bg-line-strong">
+                {report.history.map((entry, index) => (
+                  <li key={index} className="relative grid gap-0.5 pl-6">
+                    <span
+                      aria-hidden
+                      className="absolute top-[7px] left-0 size-[7px] rounded-full ring-4 ring-bg"
+                      style={{ background: STATUS_VAR[entry.toStatus] ?? 'var(--muted)' }}
+                    />
+                    <span className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                      <span className="font-medium">{STATUS_LABEL[entry.toStatus] ?? entry.toStatus}</span>
+                      {entry.fromStatus && entry.fromStatus !== entry.toStatus && (
+                        <span className="text-muted">desde {(STATUS_LABEL[entry.fromStatus] ?? entry.fromStatus).toLowerCase()}</span>
+                      )}
+                      <time dateTime={entry.changedAt} className="tnum text-xs text-muted">
+                        {formatDateTime(entry.changedAt)}
+                      </time>
+                    </span>
+                    {entry.observations && <span className="text-[13px] leading-relaxed text-ink-2">{entry.observations}</span>}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Section>
         </div>
 
-        {/* Columna de decisiones: se queda a la vista mientras se lee el expediente. */}
-        <aside className="stagger grid gap-6 lg:sticky lg:top-8">
-          {canModerate && (
-            <Card className="overflow-hidden">
-              <span aria-hidden className="absolute inset-x-0 top-0 h-[3px]" style={{ background: STATUS_VAR[report.status] }} />
-              <CardHeader eyebrow="Resolución" title="Cambiar estado" />
-              <CardBody>
-                {options.length === 0 ? (
-                  <p className="text-sm leading-relaxed text-ink-soft">
-                    <strong className="font-medium text-ink">{STATUS_LABEL[report.status]}</strong> es un
-                    estado final: este reporte ya no cambia.
-                  </p>
-                ) : (
-                  <form onSubmit={handleStatus} className="grid gap-4">
-                    <div role="radiogroup" aria-label="Estado nuevo" className="grid gap-2">
-                      {options.map((option) => {
-                        const active = nextStatus === option;
-                        return (
-                          <button
-                            key={option}
-                            type="button"
-                            role="radio"
-                            aria-checked={active}
-                            onClick={() => setNextStatus(option)}
-                            className={cn(
-                              'flex h-11 items-center gap-3 rounded-md border px-3 text-sm transition-colors',
-                              active
-                                ? 'border-ink bg-ink text-paper'
-                                : 'border-line-strong bg-surface hover:border-ink/50',
-                            )}
-                          >
-                            <span
-                              aria-hidden
-                              className="size-2 rounded-full"
-                              style={{ background: STATUS_VAR[option] }}
-                            />
-                            {STATUS_LABEL[option]}
-                            {active && <Check className="ml-auto size-4" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <Field
-                      label={nextStatus === 'RECHAZADO' ? 'Motivo del rechazo' : 'Observaciones'}
-                      hint={
-                        nextStatus === 'RECHAZADO'
-                          ? 'Obligatorio. El denunciante lo verá en su notificación.'
-                          : 'Opcional. El denunciante las verá en su notificación.'
-                      }
-                    >
-                      <Textarea
-                        name="observations"
-                        rows={3}
-                        required={nextStatus === 'RECHAZADO'}
-                        maxLength={500}
-                        placeholder="Qué revisaste y por qué…"
-                      />
-                    </Field>
-                    <Button
-                      type="submit"
-                      variant={nextStatus === 'RECHAZADO' ? 'danger' : 'signal'}
-                      disabled={sending || !nextStatus}
-                    >
-                      Pasar a {STATUS_LABEL[nextStatus]?.toLowerCase()}
-                    </Button>
-                  </form>
-                )}
-              </CardBody>
-            </Card>
-          )}
+        {/* Decisiones: se quedan a la vista mientras se lee el reporte. */}
+        <aside className="grid divide-y divide-line rounded-xl bg-surface shadow-card lg:sticky lg:top-8">
+          <div className="grid gap-4 p-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[13px] font-medium text-ink-2">Estado</h2>
+              <StatusBadge status={report.status} />
+            </div>
+            {!canModerate ? null : options.length === 0 ? (
+              <p className="text-[13px] leading-relaxed text-muted">
+                {STATUS_LABEL[report.status]} es un estado final: este reporte ya no cambia.
+              </p>
+            ) : (
+              <form onSubmit={handleStatus} className="grid gap-3">
+                <div role="radiogroup" aria-label="Estado nuevo" className="grid gap-1.5">
+                  {options.map((option) => {
+                    const active = nextStatus === option;
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setNextStatus(option)}
+                        className={cn(
+                          'flex h-9 items-center gap-2.5 rounded-lg px-3 text-sm transition-[box-shadow,background-color,transform] duration-150 ease-out active:scale-[0.98]',
+                          active ? 'bg-ink/5 font-medium shadow-[inset_0_0_0_1.5px_var(--ink)]' : 'text-ink-2 shadow-[inset_0_0_0_1px_var(--line-strong)] hover:bg-ink/4',
+                        )}
+                      >
+                        <span aria-hidden className="size-1.5 rounded-full" style={{ background: STATUS_VAR[option] }} />
+                        Pasar a {STATUS_LABEL[option].toLowerCase()}
+                        {active && <Check aria-hidden className="ml-auto size-4" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <Field
+                  label={nextStatus === 'RECHAZADO' ? 'Motivo del rechazo' : 'Observaciones (opcional)'}
+                  hint="El denunciante lo verá en su notificación."
+                >
+                  <Textarea
+                    name="observations"
+                    rows={3}
+                    required={nextStatus === 'RECHAZADO'}
+                    maxLength={500}
+                    placeholder={nextStatus === 'RECHAZADO' ? 'Por qué no procede…' : 'Qué revisaste…'}
+                  />
+                </Field>
+                <Button
+                  type="submit"
+                  variant={nextStatus === 'RECHAZADO' ? 'danger' : 'primary'}
+                  loading={sending === 'status'}
+                  disabled={sending !== null || !nextStatus}
+                >
+                  {nextStatus === 'RECHAZADO' ? 'Rechazar reporte' : 'Guardar estado'}
+                </Button>
+              </form>
+            )}
+          </div>
 
-          {canModerate && (
-            <Card>
-              <CardHeader eyebrow="Clasificación" title="Nivel de riesgo" />
-              <CardBody className="grid gap-4">
-                <div role="radiogroup" aria-label="Nivel de riesgo" className="grid grid-cols-4 gap-1.5">
+          <div className="grid gap-3 p-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[13px] font-medium text-ink-2">Riesgo</h2>
+              <RiskMeter level={report.riskLevel} />
+            </div>
+            {canModerate && (
+              <>
+                <div role="radiogroup" aria-label="Nivel de riesgo" className="grid grid-cols-4 rounded-lg bg-sunk p-0.5">
                   {RISK_LEVELS.map((level) => {
                     const active = risk === level;
-                    const color = `var(--risk-${RISK_ORDER.indexOf(level)})`;
                     return (
                       <button
                         key={level}
@@ -452,97 +384,170 @@ export default function ReportPage() {
                         aria-checked={active}
                         onClick={() => setRisk(level)}
                         className={cn(
-                          'grid gap-2 rounded-md border px-1 pt-2.5 pb-2 text-center text-[11px] font-medium transition-[border-color,background]',
-                          active ? 'border-ink bg-ink/5' : 'border-line hover:border-line-strong',
+                          'relative h-8 rounded-md text-xs transition-colors duration-150',
+                          active ? 'font-medium text-ink' : 'text-muted hover:text-ink',
                         )}
                       >
-                        <span
-                          aria-hidden
-                          className="mx-auto h-1.5 w-8 rounded-full transition-opacity"
-                          style={{ background: color, opacity: active ? 1 : 0.45 }}
-                        />
-                        {RISK_LABEL[level]}
+                        {/* El pulgar se desliza entre opciones: es el mismo objeto, no cuatro fondos. */}
+                        {active && (
+                          <motion.span
+                            layoutId="risk-thumb"
+                            className="absolute inset-0 rounded-md bg-surface shadow-card"
+                            transition={{ type: 'spring', duration: 0.3, bounce: 0 }}
+                          />
+                        )}
+                        <span className="relative flex items-center justify-center gap-1.5">
+                          <span aria-hidden className="size-1.5 rounded-full" style={{ background: `var(--risk-${RISK_ORDER.indexOf(level)})` }} />
+                          {RISK_LABEL[level]}
+                        </span>
                       </button>
                     );
                   })}
                 </div>
-                <Button
-                  variant="outline"
-                  disabled={sending || risk === report.riskLevel || !RISK_LEVELS.includes(risk as never)}
-                  onClick={() => send('risk', { riskLevel: risk })}
-                >
-                  {risk === report.riskLevel ? 'Sin cambios' : `Guardar: ${RISK_LABEL[risk]?.toLowerCase()}`}
-                </Button>
-              </CardBody>
-            </Card>
-          )}
+                {risk !== report.riskLevel && RISK_LEVELS.includes(risk as never) && (
+                  <Button className="arrive" loading={sending === 'risk'} disabled={sending !== null} onClick={() => send('risk', { riskLevel: risk })}>
+                    Guardar como {RISK_LABEL[risk].toLowerCase()}
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
 
           {(report.reporter || extra) && (
-            <Card>
-              <CardHeader eyebrow="Origen" title="Denunciante" />
-              <CardBody className="grid gap-4">
-                {report.reporter ? (
-                  <div className="flex items-center gap-3">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-full border border-line-strong bg-sunk font-mono text-xs font-medium">
-                      {initials(report.reporter.name, report.reporter.lastName)}
+            <div className="grid gap-3 p-4">
+              <h2 className="text-[13px] font-medium text-ink-2">Denunciante</h2>
+              {report.reporter ? (
+                <div className="flex items-center gap-3">
+                  <Avatar name={report.reporter.name} lastName={report.reporter.lastName} className="size-9" />
+                  <span className="grid min-w-0 leading-snug">
+                    <span className="truncate text-sm font-medium">
+                      {report.reporter.name} {report.reporter.lastName}
                     </span>
-                    <span className="grid min-w-0 gap-0.5">
-                      <span className="truncate text-sm font-medium">
-                        {report.reporter.name} {report.reporter.lastName}
-                      </span>
-                      <span className="truncate text-xs text-muted">{report.reporter.email}</span>
-                      <span className="text-xs text-muted">{report.reporter.country}</span>
-                    </span>
-                  </div>
-                ) : (
-                  <p className="text-sm text-ink-soft">{extra?.author.name}</p>
-                )}
-                {extra?.anonymous && (
-                  <p className="flex items-start gap-2 rounded-md border border-line bg-sunk px-3 py-2 text-xs leading-relaxed text-ink-soft">
-                    <VenetianMask className="mt-px size-4 shrink-0" />
-                    Pidió publicar el reporte de forma anónima: la comunidad no ve su nombre.
-                  </p>
-                )}
-                {extra?.affectedPerson && (
-                  <div className="grid gap-1 border-t border-line pt-4">
-                    <span className="eyebrow flex items-center gap-1.5">
-                      <Lock className="size-3" />
-                      Persona afectada · privado
-                    </span>
-                    <span className="text-sm font-medium">{extra.affectedPerson.name}</span>
-                    <span className="font-mono text-xs text-ink-soft">{extra.affectedPerson.contact}</span>
-                  </div>
-                )}
-              </CardBody>
-            </Card>
+                    <span className="truncate text-[13px] text-muted">{report.reporter.email}</span>
+                  </span>
+                </div>
+              ) : (
+                <p className="text-sm text-ink-2">{extra?.author.name}</p>
+              )}
+              {report.reporter?.country && <p className="text-[13px] text-muted">{report.reporter.country}</p>}
+              {extra?.anonymous && (
+                <p className="flex items-start gap-2 text-[13px] leading-relaxed text-muted">
+                  <VenetianMask aria-hidden className="mt-0.5 size-4 shrink-0" />
+                  Pidió publicarlo de forma anónima: la comunidad no ve su nombre.
+                </p>
+              )}
+              {extra?.affectedPerson && (
+                <div className="grid gap-0.5 rounded-lg bg-sunk p-3">
+                  <span className="flex items-center gap-1.5 text-xs text-muted">
+                    <Lock aria-hidden className="size-3" />
+                    Persona afectada · dato privado
+                  </span>
+                  <span className="text-sm font-medium">{extra.affectedPerson.name}</span>
+                  <span className="font-mono text-xs text-ink-2">{extra.affectedPerson.contact}</span>
+                </div>
+              )}
+            </div>
           )}
 
-          <Card>
-            <CardHeader eyebrow="Canalización" title="Expediente" />
-            <CardBody className="grid gap-4">
-              <p className="text-sm leading-relaxed text-ink-soft">
-                Archivo con el formato para la Policía Cibernética: datos, enlaces con su riesgo,
-                evidencias con su huella e historial.
-              </p>
-              <Button variant="primary" disabled={sending || !exportable} onClick={handleExport}>
-                <Download />
-                Descargar expediente
-              </Button>
-              {!exportable && (
-                <p className="text-xs text-muted">Disponible cuando el reporte esté validado o canalizado.</p>
-              )}
-            </CardBody>
-          </Card>
+          <div className="grid gap-2.5 p-4">
+            <h2 className="text-[13px] font-medium text-ink-2">Expediente</h2>
+            <p className="text-[13px] leading-relaxed text-muted">
+              {exportable
+                ? 'Archivo para la Policía Cibernética, con enlaces, evidencias con su huella e historial.'
+                : 'Se puede descargar cuando el reporte esté validado o canalizado.'}
+            </p>
+            <Button loading={sending === 'export'} disabled={sending !== null || !exportable} onClick={handleExport}>
+              <Download />
+              Descargar expediente
+            </Button>
+          </div>
         </aside>
       </div>
-    </>
+
+      <Dialog.Root open={preview !== null} onOpenChange={(open) => !open && setPreview(null)}>
+        <Dialog.Portal>
+          <Dialog.Backdrop className="backdrop fixed inset-0 z-50 bg-[#050a1c]/80" />
+          <Dialog.Popup className="modal fixed inset-0 z-50 grid place-items-center p-6 outline-none" onClick={() => setPreview(null)}>
+            <Dialog.Title className="sr-only">Evidencia</Dialog.Title>
+            {preview && (
+              // eslint-disable-next-line @next/next/no-img-element -- el archivo vive en la API
+              <img
+                src={API_URL + preview}
+                alt="Evidencia adjunta al reporte"
+                className="max-h-full max-w-full rounded-lg object-contain shadow-pop"
+                onClick={(event) => event.stopPropagation()}
+              />
+            )}
+            <Dialog.Close
+              aria-label="Cerrar"
+              className="absolute top-4 right-4 grid size-9 place-items-center rounded-full bg-white/10 text-white transition-[background-color,transform] duration-150 hover:bg-white/20 active:scale-[0.97]"
+            >
+              <X className="size-4" />
+            </Dialog.Close>
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </div>
   );
 }
 
-function Datum({ label, value }: { label: string; value: string }) {
+/** Dónde va el reporte en su camino. Informa; no se toca. */
+function Pipeline({ status }: { status: string }) {
+  const rejected = status === 'RECHAZADO';
+  const current = PIPELINE.indexOf(status);
   return (
-    <div className="grid gap-1">
-      <dt className="eyebrow">{label}</dt>
+    <ol aria-label="Avance del reporte" className="mb-2 flex items-center gap-2 text-[13px]">
+      {rejected ? (
+        <li className="flex items-center gap-2 font-medium" style={{ color: STATUS_VAR.RECHAZADO }}>
+          <span aria-hidden className="size-2 rounded-full bg-current" />
+          Rechazado: el reporte no procedió
+        </li>
+      ) : (
+        PIPELINE.map((step, index) => {
+          const done = index < current;
+          const active = index === current;
+          return (
+            <li key={step} aria-current={active ? 'step' : undefined} className="flex min-w-0 flex-1 items-center gap-2 last:flex-none">
+              <span
+                aria-hidden
+                className="size-2 shrink-0 rounded-full transition-colors duration-200"
+                style={{ background: done || active ? STATUS_VAR[status] : 'var(--line-strong)' }}
+              />
+              <span className={cn('truncate', active ? 'font-medium text-ink' : done ? 'text-ink-2' : 'text-muted')}>
+                {STATUS_LABEL[step]}
+              </span>
+              {index < PIPELINE.length - 1 && (
+                <span aria-hidden className="relative h-px min-w-4 flex-1 bg-line-strong">
+                  <span
+                    className="absolute inset-0 origin-left transition-transform duration-300 ease-(--ease-in-out)"
+                    style={{ background: STATUS_VAR[status], transform: `scaleX(${done ? 1 : 0})` }}
+                  />
+                </span>
+              )}
+            </li>
+          );
+        })
+      )}
+    </ol>
+  );
+}
+
+function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
+  return (
+    <section className="border-t border-line py-6 first:border-0 first:pt-0">
+      <div className="mb-3 flex items-baseline justify-between gap-4">
+        <h2 className="text-[13px] font-medium text-ink-2">{title}</h2>
+        {note && <span className="text-xs text-muted">{note}</span>}
+      </div>
+      <div className="grid gap-3">{children}</div>
+    </section>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-0.5">
+      <dt className="text-xs text-muted">{label}</dt>
       <dd className="tnum text-sm">{value}</dd>
     </div>
   );
@@ -552,12 +557,12 @@ function DefangedUrl({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
   const safe = defang(url);
   return (
-    <div className="flex items-center gap-2 rounded-md border border-line bg-sunk py-1.5 pr-1.5 pl-3">
+    <div className="flex items-center gap-2 rounded-lg bg-sunk py-1 pr-1 pl-3">
       <code className="min-w-0 flex-1 font-mono text-[13px] break-all">{safe}</code>
       <Button
         variant="ghost"
-        size="sm"
-        aria-label="Copiar enlace desactivado"
+        size="icon"
+        aria-label={copied ? 'Copiado' : 'Copiar enlace desactivado'}
         onClick={() => {
           navigator.clipboard.writeText(safe).then(() => {
             setCopied(true);
@@ -565,8 +570,19 @@ function DefangedUrl({ url }: { url: string }) {
           });
         }}
       >
-        {copied ? <Check className="text-ok" /> : <Copy />}
-        {copied ? 'Copiado' : 'Copiar'}
+        {/* El ícono cambia de uno a otro con un fundido: es el mismo botón diciendo "listo". */}
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.span
+            key={copied ? 'ok' : 'copy'}
+            initial={{ opacity: 0, scale: 0.25, filter: 'blur(4px)' }}
+            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, scale: 0.25, filter: 'blur(4px)' }}
+            transition={{ type: 'spring', duration: 0.3, bounce: 0 }}
+            className="grid"
+          >
+            {copied ? <Check className="text-ok" /> : <Copy />}
+          </motion.span>
+        </AnimatePresence>
       </Button>
     </div>
   );
@@ -574,16 +590,19 @@ function DefangedUrl({ url }: { url: string }) {
 
 function Loading() {
   return (
-    <div aria-busy aria-label="Cargando reporte" className="grid gap-6">
-      <Skeleton className="h-4 w-40" />
+    <div aria-busy aria-label="Cargando reporte" className="grid gap-8">
       <div className="grid gap-3">
-        <Skeleton className="h-3 w-56" />
-        <Skeleton className="h-12 w-3/5" />
-        <Skeleton className="h-6 w-80" />
+        <Skeleton className="h-3.5 w-20" />
+        <Skeleton className="h-8 w-3/5" />
+        <Skeleton className="h-3.5 w-72" />
       </div>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
-        <Skeleton className="h-72 rounded-xl" />
-        <Skeleton className="h-72 rounded-xl" />
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="grid content-start gap-3">
+          <Skeleton className="h-3.5 w-full" />
+          <Skeleton className="h-3.5 w-11/12" />
+          <Skeleton className="h-3.5 w-4/5" />
+        </div>
+        <Skeleton className="h-80 rounded-xl" />
       </div>
     </div>
   );

@@ -1,34 +1,30 @@
-import { Slot } from 'radix-ui';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { LoaderCircle } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
-const buttonVariants = cva(
-  'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[background,color,box-shadow,transform] duration-150 active:translate-y-px disabled:pointer-events-none disabled:opacity-45 [&_svg]:size-4 [&_svg]:shrink-0',
+export const buttonVariants = cva(
+  // Se hunde al presionar (0.97, 160 ms): confirma que la interfaz escuchó.
+  'relative inline-flex shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-medium transition-[transform,background-color,box-shadow,color] duration-150 ease-out enabled:active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
-        // Tinta sobre papel: la acción principal de cada pantalla.
+        // Ámbar: la acción principal de la pantalla, una sola.
         primary:
-          'bg-ink text-paper shadow-[0_1px_0_#ffffff26_inset,0_1px_2px_#0a133040] hover:bg-ink/90',
-        // Ámbar: solo para lo que avanza un expediente.
-        signal:
-          'bg-signal text-[#0a1330] shadow-[0_1px_0_#ffffff66_inset,0_1px_2px_#8a530040] hover:brightness-105',
-        outline:
-          'border border-line-strong bg-surface text-ink hover:border-ink/50 hover:bg-sunk',
-        ghost: 'text-ink-soft hover:bg-ink/6 hover:text-ink',
-        danger:
-          'border border-danger/40 bg-danger/8 text-danger hover:bg-danger hover:text-paper',
-        link: 'h-auto p-0 text-ink underline decoration-line-strong underline-offset-4 hover:decoration-signal',
+          'bg-accent text-on-accent shadow-[inset_0_1px_0_rgb(255_255_255/0.35),0_1px_2px_rgb(10_19_48/0.2)] hover:brightness-[1.04]',
+        solid: 'bg-ink text-bg hover:bg-ink/90',
+        outline: 'bg-surface text-ink shadow-card hover:bg-sunk',
+        ghost: 'text-ink-2 hover:bg-ink/6 hover:text-ink',
+        danger: 'bg-danger-wash text-danger hover:bg-danger hover:text-white dark:hover:text-bg',
       },
       size: {
-        sm: 'h-8 px-3 text-[13px]',
-        md: 'h-10 px-4',
-        lg: 'h-12 px-6 text-[15px]',
-        icon: 'size-9',
+        sm: 'h-8 px-2.5 text-[13px]',
+        md: 'h-9 px-3.5 text-sm',
+        lg: 'h-11 px-5 text-[15px]',
+        icon: 'size-8',
       },
     },
-    defaultVariants: { variant: 'primary', size: 'md' },
+    defaultVariants: { variant: 'outline', size: 'md' },
   },
 );
 
@@ -36,12 +32,23 @@ export function Button({
   className,
   variant,
   size,
-  asChild = false,
+  loading = false,
+  disabled,
+  children,
   ...props
-}: ComponentProps<'button'> &
-  VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot.Root : 'button';
+}: ComponentProps<'button'> & VariantProps<typeof buttonVariants> & { loading?: boolean }) {
   return (
-    <Comp className={cn(buttonVariants({ variant, size }), className)} {...props} />
+    <button
+      className={cn(buttonVariants({ variant, size }), className)}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      {...props}
+    >
+      {/* La etiqueta conserva su lugar mientras carga: el botón no cambia de ancho. */}
+      <span className={cn('inline-flex items-center gap-1.5 transition-opacity duration-150', loading && 'opacity-0')}>
+        {children}
+      </span>
+      {loading && <LoaderCircle aria-hidden className="spinner absolute" />}
+    </button>
   );
 }

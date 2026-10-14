@@ -1,28 +1,42 @@
 'use client';
 
-import { ThemeProvider } from 'next-themes';
-import { Tooltip } from 'radix-ui';
+import { MotionConfig } from 'motion/react';
+import { ThemeProvider, useTheme } from 'next-themes';
 import { Toaster } from 'sonner';
+import { TooltipProvider } from './ui/tooltip';
+
+function ThemedToaster() {
+  const { resolvedTheme } = useTheme();
+  return (
+    <Toaster
+      theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
+      position="bottom-right"
+      gap={8}
+      toastOptions={{
+        style: {
+          fontFamily: 'var(--font-sans)',
+          background: 'var(--surface)',
+          color: 'var(--ink)',
+          border: 'none',
+          boxShadow: 'var(--shadow-pop)',
+          borderRadius: 12,
+        },
+      }}
+    />
+  );
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-      <Tooltip.Provider delayDuration={250}>{children}</Tooltip.Provider>
-      <Toaster
-        position="bottom-right"
-        toastOptions={{
-          unstyled: true,
-          classNames: {
-            toast:
-              'flex w-[22rem] items-start gap-3 rounded-lg border border-line-strong bg-surface p-4 text-sm text-ink shadow-pop',
-            title: 'font-medium leading-snug',
-            description: 'text-muted',
-            icon: 'mt-0.5',
-            error: '[&_[data-icon]]:text-danger',
-            success: '[&_[data-icon]]:text-ok',
-          },
-        }}
-      />
+    // El tema sigue al sistema; cambiarlo no dispara todas las transiciones de color a la vez.
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+      {/* Con "reducir movimiento" Motion deja solo los fundidos. */}
+      <MotionConfig reducedMotion="user">
+        <TooltipProvider delay={500} closeDelay={0}>
+          {children}
+        </TooltipProvider>
+        <ThemedToaster />
+      </MotionConfig>
     </ThemeProvider>
   );
 }
