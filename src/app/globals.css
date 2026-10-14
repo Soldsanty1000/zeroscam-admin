@@ -43,6 +43,15 @@
   --chart-1: #0a1330;
   --chart-grid: #e7e9ef;
 
+  /* Panel destacado: resume o señala lo principal. Sigue al tema; lo distingue
+     el borde ámbar, no un fondo oscuro. */
+  --feature: #f7f8fa;
+  --on-feature: var(--ink);
+  --on-feature-2: var(--muted);
+  --feature-line: var(--line);
+  --feature-accent: var(--accent-ink);
+  --feature-track: rgb(10 19 48 / 0.08);
+
   /* Elevación por sombra en capas, no por borde (el anillo es la primera capa). */
   --ring: 0 0 0 1px rgb(10 19 48 / 0.08);
   --shadow-card: var(--ring), 0 1px 2px -1px rgb(10 19 48 / 0.08), 0 2px 4px 0 rgb(10 19 48 / 0.04);
@@ -87,6 +96,14 @@
   --chart-1: #f5a623;
   --chart-grid: #1a2650;
 
+  /* En oscuro se eleva un tono sobre la superficie. */
+  --feature: #18265a;
+  --on-feature: #f1f3f9;
+  --on-feature-2: #a9b1cc;
+  --feature-line: rgb(255 255 255 / 0.1);
+  --feature-accent: var(--accent);
+  --feature-track: rgb(255 255 255 / 0.1);
+
   --ring: 0 0 0 1px rgb(255 255 255 / 0.08);
   --shadow-card: var(--ring);
   --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.1), 0 16px 48px -8px rgb(0 0 0 / 0.7);
@@ -110,6 +127,12 @@
   --color-danger: var(--danger);
   --color-danger-wash: var(--danger-wash);
   --color-ok: var(--ok);
+  --color-feature: var(--feature);
+  --color-on-feature: var(--on-feature);
+  --color-on-feature-2: var(--on-feature-2);
+  --color-feature-line: var(--feature-line);
+  --color-feature-accent: var(--feature-accent);
+  --color-feature-track: var(--feature-track);
 
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', monospace;

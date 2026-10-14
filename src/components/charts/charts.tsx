@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 export type Count = { name: string; count: number };
 
 /** `2026-10` → "oct 26". */
-function month(name: string, long = false): string {
+export function month(name: string, long = false): string {
   if (!/^\d{4}-\d{2}$/.test(name)) return name;
   const [year, m] = name.split('-').map(Number);
   return new Date(year, m - 1, 1)
@@ -21,7 +21,7 @@ function month(name: string, long = false): string {
  * Completa los meses sin registros con cero y muestra al menos los últimos
  * seis: una serie con huecos (o con un solo punto) no deja ver la tendencia.
  */
-function fillMonths(counts: Count[]): Count[] {
+export function fillMonths(counts: Count[]): Count[] {
   const known = new Map(counts.filter((c) => /^\d{4}-\d{2}$/.test(c.name)).map((c) => [c.name, c.count]));
   if (known.size === 0) return counts;
   const index = (name: string) => Number(name.slice(0, 4)) * 12 + Number(name.slice(5, 7)) - 1;
