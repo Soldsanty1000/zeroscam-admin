@@ -34,24 +34,24 @@ export function Select({
       <Base.Trigger
         aria-label={ariaLabel}
         className={cn(
-          'group inline-flex w-full select-none items-center justify-between gap-2 rounded-lg border border-line-strong bg-surface pr-2 pl-3 text-ink transition-[border-color,box-shadow,transform] duration-150 hover:border-muted/60 focus-visible:border-accent-ink focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-accent/30 enabled:active:scale-[0.98] data-[disabled]:opacity-50 data-[popup-open]:border-accent-ink',
-          size === 'sm' ? 'h-8 text-[13px]' : 'h-9 text-sm',
+          'group inline-flex w-full select-none items-center justify-between gap-2 rounded-sm border-2 border-field bg-surface pr-2.5 pl-3 text-ink transition-[border-color,box-shadow] duration-150 focus-visible:border-ink focus-visible:outline-3 focus-visible:outline-offset-0 focus-visible:outline-accent data-[disabled]:opacity-50 data-[popup-open]:border-ink',
+          size === 'sm' ? 'h-9 text-[15px]' : 'h-11 text-base',
           className,
         )}
       >
         <Base.Value className="truncate" />
         <Base.Icon className="text-muted transition-colors group-hover:text-ink">
-          <ChevronsUpDown className="size-3.5" />
+          <ChevronsUpDown className="size-4" />
         </Base.Icon>
       </Base.Trigger>
       <Base.Portal>
         <Base.Positioner sideOffset={6} alignItemWithTrigger={false} className="z-50 outline-none">
-          <Base.Popup className="pop max-h-72 min-w-[var(--anchor-width)] overflow-y-auto overscroll-contain rounded-xl bg-surface p-1 shadow-pop outline-none">
+          <Base.Popup className="pop max-h-80 min-w-[var(--anchor-width)] overflow-y-auto overscroll-contain rounded-md border border-line-strong bg-surface p-1 shadow-pop outline-none">
             {options.map((option) => (
               <Base.Item
                 key={option.value}
                 value={option.value}
-                className="grid h-8 cursor-default select-none grid-cols-[1rem_1fr] items-center gap-2 rounded-md pr-3 pl-2 text-sm text-ink outline-none data-[highlighted]:bg-ink/7"
+                className="grid h-10 cursor-default select-none grid-cols-[1rem_1fr] items-center gap-2 rounded-sm pr-3 pl-2 text-base text-ink outline-none data-[highlighted]:bg-sunk"
               >
                 <Base.ItemIndicator className="col-start-1">
                   <Check className="size-3.5" />

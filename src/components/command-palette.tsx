@@ -6,12 +6,39 @@ import { Dialog } from '@base-ui/react/dialog';
 import { Command } from 'cmdk';
 import { ChartNoAxesColumn, FileText, Inbox, LogOut, Monitor, Moon, Search, Sun, Users } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { canManageUsers } from '@/lib/access';
 import { api, logout } from '@/lib/api';
-import { folio, STATUS_LABEL } from '@/lib/format';
-import { isStaff, useMe } from '@/lib/session';
+import { folio } from '@/lib/format';
+import { pathWithId } from '@/lib/ids';
+import { useMe } from '@/lib/session';
 import { Kbd } from './ui/misc';
 
-type Report = { id: number; fraudType: string; status: string; description: string; createdAt: string };
+/** De cada reporte la paleta guarda solo lo que muestra: nada de descripciones ni enlaces. */
+type Entry = { id: number; fraudType: string; createdAt: string };
+
+const CACHE_MS = 60_000;
+let cache: { at: number; entries: Entry[] } | null = null;
+let inFlight: Promise<Entry[]> | null = null;
+
+/**
+ * La lista de reportes se pide una vez por minuto y se reutiliza entre
+ * aperturas de la paleta, en vez de bajar todos los reportes cada vez. (El
+ * servidor no tiene un listado resumido; se descarta lo que sobra al llegar.)
+ */
+function loadEntries(): Promise<Entry[]> {
+  if (cache && Date.now() - cache.at < CACHE_MS) return Promise.resolve(cache.entries);
+  inFlight ??= api
+    .get<Entry[]>('/reports')
+    .then(({ data }) => {
+      const entries = data.map(({ id, fraudType, createdAt }) => ({ id, fraudType, createdAt }));
+      cache = { at: Date.now(), entries };
+      return entries;
+    })
+    .finally(() => {
+      inFlight = null;
+    });
+  return inFlight;
+}
 
 const item =
   'flex h-9 cursor-default select-none items-center gap-2.5 rounded-md px-2 text-sm text-ink-2 outline-none data-[selected=true]:bg-ink/7 data-[selected=true]:text-ink [&_svg]:size-4 [&_svg]:text-muted';
@@ -24,14 +51,17 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const router = useRouter();
   const me = useMe();
   const { setTheme } = useTheme();
-  const [reports, setReports] = useState<Report[]>([]);
+  const [reports, setReports] = useState<Entry[]>([]);
 
   useEffect(() => {
     if (!open) return;
-    api
-      .get<Report[]>('/reports')
-      .then(({ data }) => setReports(data))
+    let cancelled = false;
+    loadEntries()
+      .then((entries) => !cancelled && setReports(entries))
       .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   function run(action: () => void) {
@@ -52,7 +82,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               <Search aria-hidden className="size-4 text-muted" />
               <Command.Input
                 autoFocus
-                placeholder="Busca un reporte por folio o texto, o escribe una acción…"
+                placeholder="Busca un reporte por folio o tipo, o escribe una acción…"
                 className="h-12 w-full bg-transparent text-[15px] text-ink outline-none placeholder:text-muted"
               />
               <Kbd>esc</Kbd>
@@ -64,7 +94,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                 <Command.Item className={item} onSelect={() => run(() => router.push('/'))}>
                   <Inbox /> Reportes
                 </Command.Item>
-                {isStaff(me) && (
+                {canManageUsers(me?.role) && (
                   <Command.Item className={item} onSelect={() => run(() => router.push('/usuarios'))}>
                     <Users /> Usuarios
                   </Command.Item>
@@ -79,14 +109,13 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                   {reports.slice(0, 50).map((report) => (
                     <Command.Item
                       key={report.id}
-                      value={`${folio(report.id, report.createdAt)} ${report.fraudType} ${report.description}`}
+                      value={`${folio(report.id, report.createdAt)} ${report.fraudType}`}
                       className={item}
-                      onSelect={() => run(() => router.push(`/reportes/${report.id}`))}
+                      onSelect={() => run(() => router.push(pathWithId('/reportes/', report.id)))}
                     >
                       <FileText />
                       <span className="font-mono text-xs text-muted">{folio(report.id, report.createdAt)}</span>
-                      <span className="min-w-0 flex-1 truncate">{report.description}</span>
-                      <span className="shrink-0 text-xs text-muted">{STATUS_LABEL[report.status] ?? report.status}</span>
+                      <span className="min-w-0 flex-1 truncate">{report.fraudType}</span>
                     </Command.Item>
                   ))}
                 </Command.Group>
@@ -105,7 +134,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               </Command.Group>
 
               <Command.Group heading="Sesión">
-                <Command.Item className={item} onSelect={() => run(logout)}>
+                <Command.Item className={item} onSelect={() => run(() => void logout())}>
                   <LogOut /> Cerrar sesión
                 </Command.Item>
               </Command.Group>

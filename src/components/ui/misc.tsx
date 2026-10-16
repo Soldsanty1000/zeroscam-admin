@@ -29,13 +29,15 @@ export function EmptyState({
   );
 }
 
-export function InlineAlert({ children, tone = 'danger' }: { children: React.ReactNode; tone?: 'danger' | 'ok' }) {
+export function InlineAlert({ children, tone = 'danger' }: { children: React.ReactNode; tone?: 'danger' | 'ok' | 'info' }) {
   return (
     <p
       role={tone === 'danger' ? 'alert' : 'status'}
       className={cn(
         'rounded-lg px-3 py-2 text-[13px]',
-        tone === 'danger' ? 'bg-danger-wash text-danger' : 'bg-ok/10 text-ok',
+        tone === 'danger' && 'bg-danger-wash text-danger',
+        tone === 'ok' && 'bg-ok/10 text-ok',
+        tone === 'info' && 'bg-sunk text-ink-2',
       )}
     >
       {children}

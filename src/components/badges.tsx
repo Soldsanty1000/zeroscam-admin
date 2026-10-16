@@ -12,15 +12,14 @@ export const STATUS_VAR: Record<string, string> = {
   ELIMINADA: 'var(--muted)',
 };
 
-/** Estado: punto de color más texto (el color nunca va solo). */
+/** Estado como etiqueta rectangular: el texto siempre dice el estado, el color solo ayuda. */
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
   const color = STATUS_VAR[status] ?? 'var(--muted)';
   return (
     <span
-      className={cn('inline-flex h-[22px] items-center gap-1.5 rounded-full px-2 text-xs font-medium whitespace-nowrap', className)}
-      style={{ color, background: `color-mix(in oklab, ${color} 12%, transparent)` }}
+      className={cn('inline-flex h-7 items-center rounded-sm px-2 text-[15px] font-semibold whitespace-nowrap', className)}
+      style={{ color, background: `color-mix(in oklab, ${color} 13%, transparent)` }}
     >
-      <span aria-hidden className="size-1.5 rounded-full" style={{ background: color }} />
       {STATUS_LABEL[status] ?? status.charAt(0) + status.slice(1).toLowerCase()}
     </span>
   );
@@ -38,12 +37,12 @@ export function RiskMeter({ level, className }: { level: string; className?: str
         {[1, 2, 3, 4].map((n) => (
           <span
             key={n}
-            className="h-3 w-1 rounded-full"
+            className="h-4 w-1.5 rounded-[1px]"
             style={{ background: n <= step ? `var(--risk-${step})` : 'color-mix(in oklab, var(--ink) 12%, transparent)' }}
           />
         ))}
       </span>
-      <span className={cn('text-[13px]', step === 0 ? 'text-muted' : 'text-ink-2')}>{RISK_LABEL[level] ?? level}</span>
+      <span className={cn('text-[15px]', step === 0 ? 'text-muted' : 'font-semibold text-ink')}>{RISK_LABEL[level] ?? level}</span>
     </span>
   );
 }

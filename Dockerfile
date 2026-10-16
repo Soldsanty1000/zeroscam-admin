@@ -16,6 +16,9 @@ COPY . .
 # por eso la URL de la API se pasa en el build y no al arrancar.
 ARG NEXT_PUBLIC_API_URL=http://localhost:3000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Solo para un laboratorio sin TLS: permite http:// hacia una IP de la red.
+ARG ALLOW_INSECURE_API_URL=false
+ENV ALLOW_INSECURE_API_URL=$ALLOW_INSECURE_API_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
@@ -24,6 +27,8 @@ RUN npm run build
 FROM node:24-alpine AS runner
 WORKDIR /app
 
+ARG ALLOW_INSECURE_API_URL=false
+ENV ALLOW_INSECURE_API_URL=$ALLOW_INSECURE_API_URL
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3001

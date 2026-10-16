@@ -26,10 +26,11 @@ function ThemedToaster() {
   );
 }
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children, nonce }: { children: React.ReactNode; nonce?: string }) {
   return (
     // El tema sigue al sistema; cambiarlo no dispara todas las transiciones de color a la vez.
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    // `nonce`: el guion que pone la clase del tema es en línea y el CSP lo exige.
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange nonce={nonce}>
       {/* Con "reducir movimiento" Motion deja solo los fundidos. */}
       <MotionConfig reducedMotion="user">
         <TooltipProvider delay={500} closeDelay={0}>

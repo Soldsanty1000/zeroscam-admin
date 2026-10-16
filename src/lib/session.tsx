@@ -1,17 +1,16 @@
 'use client';
 
 import { createContext, useContext } from 'react';
+import type { Me } from './access';
 
-export type Me = {
-  id: string;
-  name: string;
-  lastName: string;
-  email: string;
-  role: string;
-};
+export type { Me };
 
 export type Session = {
-  /** La cuenta con sesión abierta; `null` mientras se pide a `GET /users/me`. */
+  /**
+   * La cuenta con sesión abierta. El layout del panel no pinta nada hasta
+   * conocerla, así que dentro del panel nunca es `null`; el contexto lo admite
+   * solo por su valor inicial.
+   */
   me: Me | null;
   /** Reportes RECIBIDO o EN_REVISION; `null` mientras no se sabe. */
   pending: number | null;
@@ -32,8 +31,4 @@ export function useSession(): Session {
 
 export function useMe(): Me | null {
   return useContext(SessionContext).me;
-}
-
-export function isStaff(me: Me | null): boolean {
-  return me?.role === 'Administrador' || me?.role === 'Owner';
 }

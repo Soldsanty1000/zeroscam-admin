@@ -12,6 +12,7 @@ import { EmptyState, Skeleton } from '@/components/ui/misc';
 import { Select } from '@/components/ui/select';
 import { api, errorMessage } from '@/lib/api';
 import { formatDate, number } from '@/lib/format';
+import { pathWithId } from '@/lib/ids';
 import { useMe } from '@/lib/session';
 import { cn } from '@/lib/utils';
 
@@ -95,7 +96,7 @@ export default function UsersPage() {
   async function update({ user, changes, done }: Pending) {
     setSending(true);
     try {
-      await api.patch<User>(`/users/${user.id}`, changes);
+      await api.patch<User>(pathWithId('/users/', user.id), changes);
       toast.success(done);
       await load();
     } catch (e) {

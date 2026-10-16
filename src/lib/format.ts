@@ -82,9 +82,40 @@ export function timeAgo(value: string): string {
   return formatDate(value);
 }
 
-/** Enlace "desactivado" para que nadie lo abra por accidente: hxxps://sitio[.]com */
-export function defang(url: string): string {
-  return url.replace(/^http/i, 'hxxp').replace(/\./g, '[.]');
+/** Caracteres de control y de formato (bidi, ancho cero…) que sirven para disfrazar un enlace. */
+const INVISIBLE = /[\p{Cc}\p{Cf}]/gu;
+const NON_ASCII = /[^\p{ASCII}]/u;
+
+/** Antepuesto a lo que parece un dominio con caracteres no ASCII o punycode (`xn--`). */
+export const IDN_MARK = '⚠ IDN ';
+
+/**
+ * "Desactiva" los enlaces de un texto para que nadie los abra por accidente:
+ * `https://sitio.com` → `hxxps://sitio[.]com`.
+ *
+ * Quita los caracteres de control y de formato (también los bidi, que
+ * reordenan lo que se ve), cambia TODOS los `http(s)://` y todos los puntos, y
+ * antepone {@link IDN_MARK} a cualquier dominio con letras no ASCII o punycode,
+ * porque `аpple.com` (con una "а" cirílica) se ve igual que `apple.com`.
+ *
+ * @param text - Un enlace, o un texto libre que pueda traer enlaces.
+ * @param options.prose - En texto libre, el punto que cierra una oración
+ * (seguido de espacio o del final) se deja como está para que siga leyéndose.
+ */
+export function defang(text: string, { prose = false }: { prose?: boolean } = {}): string {
+  return text
+    .replace(INVISIBLE, (char) => (char === '\n' || char === '\t' ? char : ''))
+    .replace(/http(s?):\/\//gi, 'hxxp$1://')
+    .replace(/\./g, (dot, offset: number, whole: string) => {
+      if (!prose) return '[.]';
+      const before = whole[offset - 1];
+      const after = whole[offset + 1];
+      return before && after && /\S/.test(before) && /\S/.test(after) ? '[.]' : dot;
+    })
+    .replace(/\S+/g, (token) => {
+      const looksLikeHost = token.includes('[.]') || token.includes('://');
+      return looksLikeHost && (NON_ASCII.test(token) || /xn--/i.test(token)) ? IDN_MARK + token : token;
+    });
 }
 
 export function initials(name: string, lastName = ''): string {

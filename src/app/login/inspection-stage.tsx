@@ -511,7 +511,8 @@ export function InspectionStage() {
       <Specimens reduced={reduced} />
 
       <p className="hidden max-w-[56ch] text-[14px] leading-relaxed text-[var(--mist)] lg:block">
-        Uso exclusivo del personal autorizado.
+        Uso exclusivo del personal autorizado. Los cambios de estado, de riesgo y de cuentas quedan registrados en la bitácora de
+        auditoría.
       </p>
     </div>
   );

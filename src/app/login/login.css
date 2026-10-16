@@ -1,37 +1,6 @@
-@import '@fontsource-variable/atkinson-hyperlegible-next/wght.css';
-@import '@fontsource-variable/atkinson-hyperlegible-mono/wght.css';
-
 /* Inicio de sesión: a la izquierda un banco de inspección que hace lo mismo
    que el panel (encontrar el carácter impostor en un dominio); a la derecha,
    la hoja del formulario. Todo lo de aquí solo se usa en /login. */
-
-/* ---------- Base propia de /login ----------
-   El diseño se pensó con la tipografía Atkinson, base de 16px y unos neutros
-   un poco más marcados. Se acota a esta pantalla para no cambiar el resto del panel. */
-
-:root:has(.login-page) {
-  font-size: 16px;
-}
-
-.login-page {
-  --field: #687089;
-  --font-sans: 'Atkinson Hyperlegible Next Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'Atkinson Hyperlegible Mono Variable', ui-monospace, 'SF Mono', monospace;
-  font-family: var(--font-sans);
-}
-/* Solo en el tema claro: en el oscuro se quedan los valores del panel. */
-:root:not(.dark) .login-page {
-  --bg: #ffffff;
-  --sunk: #f2f3f6;
-  --line: #dcdfe7;
-  --line-strong: #b9bfcd;
-}
-.dark .login-page {
-  --field: #5d6994;
-}
-.login-page .font-mono {
-  font-family: var(--font-mono);
-}
 
 .stage {
   --abyss: #050b22;

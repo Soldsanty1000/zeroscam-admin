@@ -3,17 +3,20 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Dialog } from '@base-ui/react/dialog';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, Check, Copy, Download, FileText, Lock, TriangleAlert, VenetianMask, X } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Download, Lock, TriangleAlert, VenetianMask } from 'lucide-react';
 import { toast } from 'sonner';
 import { Avatar, RiskMeter, StatusBadge, STATUS_VAR } from '@/components/badges';
+import { EvidenceGallery } from '@/components/evidence-gallery';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Field, Textarea } from '@/components/ui/field';
 import { EmptyState, Skeleton } from '@/components/ui/misc';
-import { API_URL, api, errorMessage } from '@/lib/api';
+import { canModerate as canModerateRole } from '@/lib/access';
+import { api, errorMessage } from '@/lib/api';
+import { exportFileName, saveBlob } from '@/lib/download';
 import { RISK_LABEL, RISK_LEVELS, RISK_ORDER, STATUS_LABEL, defang, folio, formatDateTime, timeAgo } from '@/lib/format';
-import { isStaff, useSession } from '@/lib/session';
+import { isNumericId, pathWithId } from '@/lib/ids';
+import { useSession } from '@/lib/session';
 import { cn } from '@/lib/utils';
 
 type Report = {
@@ -25,7 +28,10 @@ type Report = {
   incidentDate: string;
   createdAt: string;
   urls: string[];
+  /** Rutas autenticadas: `/reports/<id>/evidence/<archivo>`; no son enlaces públicos. */
   evidenceUrls: string[];
+  /** Si el reporte es anónimo, el servidor no manda `reporter`. */
+  anonymous?: boolean;
   history?: {
     fromStatus: string | null;
     toStatus: string;
@@ -62,28 +68,28 @@ const NEXT: Record<string, string[]> = {
 const PIPELINE = ['RECIBIDO', 'EN_REVISION', 'VALIDADO', 'CANALIZADO'];
 
 const isPending = (status: string) => status === 'RECIBIDO' || status === 'EN_REVISION';
-const isImage = (path: string) => /\.(jpe?g|png|gif|webp)$/i.test(path);
 
 export default function ReportPage() {
   const { id } = useParams<{ id: string }>();
+  // El `id` sale de la URL: solo dígitos, y aun así se codifica al armar la ruta.
+  const validId = isNumericId(id);
   const { me, pending, setPending } = useSession();
-  const canModerate = isStaff(me);
+  const canModerate = canModerateRole(me?.role);
   const [report, setReport] = useState<Report | null>(null);
   const [extra, setExtra] = useState<Extra | null>(null);
   const [error, setError] = useState('');
   const [sending, setSending] = useState<'status' | 'risk' | 'export' | null>(null);
   const [nextStatus, setNextStatus] = useState('');
   const [risk, setRisk] = useState('');
-  const [preview, setPreview] = useState<string | null>(null);
 
   const load = useCallback(() => {
     // La vista de la app es un extra: si el rol no puede pedirla, no pasa nada.
     api
-      .get<Extra>(`/community/reports/${id}`)
+      .get<Extra>(pathWithId('/community/reports/', id))
       .then(({ data }) => setExtra(data))
       .catch(() => setExtra(null));
     return api
-      .get<Report>(`/reports/${id}`)
+      .get<Report>(pathWithId('/reports/', id))
       .then(({ data }) => {
         setReport(data);
         setRisk(data.riskLevel);
@@ -97,14 +103,14 @@ export default function ReportPage() {
   }, [id]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (validId) load();
+  }, [validId, load]);
 
   async function send(kind: 'status' | 'risk', body: object) {
     const before = report?.status;
     setSending(kind);
     try {
-      const { data } = await api.patch<Report>(`/reports/${id}/${kind}`, body);
+      const { data } = await api.patch<Report>(pathWithId('/reports/', id, `/${kind}`), body);
       toast.success(data.message ?? 'Cambio guardado');
       // El PATCH no regresa `history` ni `reporter`: se vuelve a pedir el detalle.
       const fresh = await load();
@@ -121,16 +127,15 @@ export default function ReportPage() {
   async function handleExport() {
     setSending('export');
     try {
-      const { data } = await api.get<{ folio: string }>(`/reports/${id}/export`);
+      const { data } = await api.get<{ folio: string }>(pathWithId('/reports/', id, '/export'));
       // Un enlace normal no puede mandar el Bearer: el expediente se pide
-      // con `api` y el archivo se arma aquí con lo que regresó.
+      // con `api` y el archivo se arma aquí con lo que regresó. El folio viene
+      // del servidor: el nombre del archivo se sanea.
       const file = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(file);
-      link.download = `${data.folio}.json`;
-      link.click();
-      URL.revokeObjectURL(link.href);
-      toast.success(`Expediente ${data.folio} descargado`);
+      saveBlob(file, exportFileName(data.folio));
+      toast.success('Expediente descargado', {
+        description: 'Contiene datos personales: guárdalo en un lugar seguro y no lo compartas por canales abiertos.',
+      });
     } catch (e) {
       toast.error(errorMessage(e));
     }
@@ -146,6 +151,22 @@ export default function ReportPage() {
       // El servidor rechaza un texto vacío: si no hay, no se manda.
       ...(observations && { observations }),
     }).then(() => form.reset());
+  }
+
+  if (!validId) {
+    return (
+      <EmptyState
+        tone="danger"
+        icon={<TriangleAlert />}
+        title="Ese reporte no existe"
+        description="La dirección no corresponde a un reporte."
+        action={
+          <Link href="/" className={buttonVariants()}>
+            Volver a los reportes
+          </Link>
+        }
+      />
+    );
   }
 
   if (error) {
@@ -204,7 +225,7 @@ export default function ReportPage() {
           <Pipeline status={report.status} />
 
           <Section title="Qué pasó">
-            <p className="max-w-[68ch] text-[15px] leading-[1.65] whitespace-pre-line">{report.description}</p>
+            <p className="max-w-[68ch] text-[15px] leading-[1.65] whitespace-pre-line">{defang(report.description, { prose: true })}</p>
             <dl className="mt-5 flex flex-wrap gap-x-10 gap-y-3">
               <Fact label="Ocurrió" value={formatDateTime(report.incidentDate)} />
               <Fact label="Se reportó" value={formatDateTime(report.createdAt)} />
@@ -221,15 +242,15 @@ export default function ReportPage() {
               note={report.urls.length > 0 ? 'Desactivados para que nadie los abra por accidente' : undefined}
             >
               <ul className="grid gap-1.5">
-                {report.urls.map((url) => (
-                  <li key={url}>
+                {report.urls.map((url, index) => (
+                  <li key={`${index}-${url}`}>
                     <DefangedUrl url={url} />
                   </li>
                 ))}
               </ul>
               {extra?.suspiciousText && (
                 <p className="rounded-lg bg-sunk px-3 py-2.5 font-mono text-[13px] leading-relaxed break-words">
-                  {extra.suspiciousText}
+                  {defang(extra.suspiciousText, { prose: true })}
                 </p>
               )}
             </Section>
@@ -242,39 +263,7 @@ export default function ReportPage() {
             {report.evidenceUrls.length === 0 ? (
               <p className="text-sm text-muted">El denunciante no adjuntó archivos.</p>
             ) : (
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {report.evidenceUrls.map((path) => {
-                  const name = path.replace('/uploads/', '');
-                  const thumb = (
-                    <>
-                      <span className="grid aspect-[4/3] place-items-center overflow-hidden rounded-lg bg-sunk outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10">
-                        {isImage(path) ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- el archivo vive en la API, fuera del optimizador de Next
-                          <img src={API_URL + path} alt="" loading="lazy" className="size-full object-cover" />
-                        ) : (
-                          <FileText className="size-6 text-muted" />
-                        )}
-                      </span>
-                      <span className="mt-1.5 block truncate font-mono text-[11px] text-muted">{name}</span>
-                    </>
-                  );
-                  const shared =
-                    'block w-full rounded-lg text-left outline-none transition-transform duration-150 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-ink';
-                  return (
-                    <li key={path}>
-                      {isImage(path) ? (
-                        <button type="button" className={shared} aria-label={`Ver evidencia ${name}`} onClick={() => setPreview(path)}>
-                          {thumb}
-                        </button>
-                      ) : (
-                        <a href={API_URL + path} target="_blank" rel="noreferrer" className={shared}>
-                          {thumb}
-                        </a>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+              <EvidenceGallery reportId={String(report.id)} paths={report.evidenceUrls} />
             )}
           </Section>
 
@@ -284,7 +273,7 @@ export default function ReportPage() {
             ) : (
               <ol className="relative grid gap-4 before:absolute before:top-2 before:bottom-2 before:left-[3px] before:w-px before:bg-line-strong">
                 {report.history.map((entry, index) => (
-                  <li key={index} className="relative grid gap-0.5 pl-6">
+                  <li key={`${index}-${entry.changedAt}`} className="relative grid gap-0.5 pl-6">
                     <span
                       aria-hidden
                       className="absolute top-[7px] left-0 size-[7px] rounded-full ring-4 ring-bg"
@@ -299,7 +288,9 @@ export default function ReportPage() {
                         {formatDateTime(entry.changedAt)}
                       </time>
                     </span>
-                    {entry.observations && <span className="text-[13px] leading-relaxed text-ink-2">{entry.observations}</span>}
+                    {entry.observations && (
+                      <span className="text-[13px] leading-relaxed text-ink-2">{defang(entry.observations, { prose: true })}</span>
+                    )}
                   </li>
                 ))}
               </ol>
@@ -413,7 +404,7 @@ export default function ReportPage() {
             )}
           </div>
 
-          {(report.reporter || extra) && (
+          {(report.reporter || extra || report.anonymous) && (
             <div className="grid gap-3 p-4">
               <h2 className="text-[13px] font-medium text-ink-2">Denunciante</h2>
               {report.reporter ? (
@@ -427,13 +418,13 @@ export default function ReportPage() {
                   </span>
                 </div>
               ) : (
-                <p className="text-sm text-ink-2">{extra?.author.name}</p>
+                extra && <p className="text-sm text-ink-2">{extra.author.name}</p>
               )}
               {report.reporter?.country && <p className="text-[13px] text-muted">{report.reporter.country}</p>}
-              {extra?.anonymous && (
+              {(report.anonymous ?? extra?.anonymous) && (
                 <p className="flex items-start gap-2 text-[13px] leading-relaxed text-muted">
                   <VenetianMask aria-hidden className="mt-0.5 size-4 shrink-0" />
-                  Pidió publicarlo de forma anónima: la comunidad no ve su nombre.
+                  Pidió anonimato: sus datos personales no se muestran en el panel.
                 </p>
               )}
               {extra?.affectedPerson && (
@@ -456,6 +447,12 @@ export default function ReportPage() {
                 ? 'Archivo para la Policía Cibernética, con enlaces, evidencias con su huella e historial.'
                 : 'Se puede descargar cuando el reporte esté validado o canalizado.'}
             </p>
+            {exportable && (
+              <p className="flex items-start gap-2 rounded-lg bg-sunk p-2.5 text-xs leading-relaxed text-ink-2">
+                <Lock aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+                El archivo contiene datos personales. Guárdalo en un lugar seguro y no lo compartas por canales abiertos.
+              </p>
+            )}
             <Button loading={sending === 'export'} disabled={sending !== null || !exportable} onClick={handleExport}>
               <Download />
               Descargar expediente
@@ -463,30 +460,6 @@ export default function ReportPage() {
           </div>
         </aside>
       </div>
-
-      <Dialog.Root open={preview !== null} onOpenChange={(open) => !open && setPreview(null)}>
-        <Dialog.Portal>
-          <Dialog.Backdrop className="backdrop fixed inset-0 z-50 bg-[#050a1c]/80" />
-          <Dialog.Popup className="modal fixed inset-0 z-50 grid place-items-center p-6 outline-none" onClick={() => setPreview(null)}>
-            <Dialog.Title className="sr-only">Evidencia</Dialog.Title>
-            {preview && (
-              // eslint-disable-next-line @next/next/no-img-element -- el archivo vive en la API
-              <img
-                src={API_URL + preview}
-                alt="Evidencia adjunta al reporte"
-                className="max-h-full max-w-full rounded-lg object-contain shadow-pop"
-                onClick={(event) => event.stopPropagation()}
-              />
-            )}
-            <Dialog.Close
-              aria-label="Cerrar"
-              className="absolute top-4 right-4 grid size-9 place-items-center rounded-full bg-white/10 text-white transition-[background-color,transform] duration-150 hover:bg-white/20 active:scale-[0.97]"
-            >
-              <X className="size-4" />
-            </Dialog.Close>
-          </Dialog.Popup>
-        </Dialog.Portal>
-      </Dialog.Root>
     </div>
   );
 }

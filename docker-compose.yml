@@ -5,6 +5,8 @@ services:
       args:
         # URL de la API tal como la ve el NAVEGADOR de quien usa el panel
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
+        # true solo en un laboratorio sin TLS (API por http:// en una IP de la red)
+        ALLOW_INSECURE_API_URL: ${ALLOW_INSECURE_API_URL:-false}
     image: zeroscam-admin:latest
     container_name: zeroscam-admin
     ports:

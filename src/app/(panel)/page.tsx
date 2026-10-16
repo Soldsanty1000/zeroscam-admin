@@ -1,79 +1,122 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { ChevronRight, Inbox, Link2, MessageSquare, Paperclip, Search, SearchX, TriangleAlert, Users } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { Inbox, RotateCw, Search, SearchX, TriangleAlert } from 'lucide-react';
 import { PageHeader } from '@/components/app-shell';
-import { RiskMeter, StatusBadge, STATUS_VAR } from '@/components/badges';
+import { NextReport } from '@/components/inbox/next-report';
+import { QueueSummary } from '@/components/inbox/queue-summary';
+import { ReportTable } from '@/components/inbox/report-table';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/field';
-import { EmptyState, Kbd, Skeleton } from '@/components/ui/misc';
+import { Field, Input } from '@/components/ui/field';
+import { EmptyState, Skeleton } from '@/components/ui/misc';
 import { Select } from '@/components/ui/select';
 import { FilterTabs } from '@/components/ui/tabs';
+import { canModerate } from '@/lib/access';
 import { api, errorMessage } from '@/lib/api';
-import { RISK_LABEL, RISK_LEVELS, STATUSES, STATUS_LABEL, folio, number, timeAgo } from '@/lib/format';
+import { RISK_LABEL, RISK_LEVELS, STATUSES, number } from '@/lib/format';
+import {
+  MODERATOR_QUEUES,
+  OPEN_STATUSES,
+  POLICE_QUEUES,
+  SORTS,
+  SORT_LABEL,
+  countByStatus,
+  latestValidated,
+  matchesQuery,
+  nextToReview,
+  plural,
+  sortReports,
+  type Extra,
+  type Report,
+  type Sort,
+} from '@/lib/reports';
 import { useSession } from '@/lib/session';
-import { cn } from '@/lib/utils';
 
-type Report = {
-  id: number;
-  fraudType: string;
-  status: string;
-  riskLevel: string;
-  description: string;
-  createdAt: string;
-  urls?: string[];
-  evidenceUrls?: string[];
+const ALL = 'all';
+
+const today = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const clock = new Intl.DateTimeFormat('es-MX', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+
+/** Lo que vacía cada bandeja, dicho para quien la abre. */
+const EMPTY_QUEUE: Record<string, string> = {
+  open: 'No hay reportes por atender. Todo lo que llegó ya tiene una decisión.',
+  validated: 'No hay reportes validados esperando canalización.',
+  closed: 'Todavía no hay reportes cerrados.',
+  channeled: 'Todavía no hay reportes canalizados.',
 };
 
-/** Lo que agrega la vista de la app (`/community`): título, ciudad y actividad. */
-type Extra = {
-  id: number;
-  title: string;
-  city: string;
-  confirmations: number;
-  comments: number;
-};
-
-const COLUMNS = 'md:grid-cols-[8.5rem_minmax(0,1fr)_7.5rem_7rem_6.5rem_1rem]';
-
-const normalize = (text: string) =>
-  text
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase();
+/**
+ * Títulos, ciudad y confirmaciones, que viven en la vista de la app. Nunca
+ * falla: si el rol no puede pedirla (Policía), la bandeja sigue funcionando
+ * con el tipo de fraude.
+ */
+async function fetchTitles(): Promise<Map<number, Extra>> {
+  const results = await Promise.allSettled(
+    STATUSES.map((s) => api.get<Extra[]>('/community/reports', { params: { scope: 'queue', status: s } })),
+  );
+  const found = new Map<number, Extra>();
+  for (const result of results) {
+    if (result.status !== 'fulfilled') continue;
+    for (const extra of result.value.data) found.set(extra.id, extra);
+  }
+  return found;
+}
 
 export default function ReportsPage() {
-  const { setPending } = useSession();
+  const { me, setPending } = useSession();
+  const moderator = canModerate(me?.role);
+  const queues = moderator ? MODERATOR_QUEUES : POLICE_QUEUES;
+
   const [reports, setReports] = useState<Report[] | null>(null);
   const [extras, setExtras] = useState<Map<number, Extra>>(new Map());
   const [error, setError] = useState('');
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [queue, setQueue] = useState(queues[0].id);
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState('ALL');
   const [risk, setRisk] = useState('ALL');
+  const [sort, setSort] = useState<Sort>('priority');
   const search = useRef<HTMLInputElement>(null);
+  const inbox = useRef<HTMLElement>(null);
+
+  const apply = useCallback(
+    (data: Report[]) => {
+      setReports(data);
+      setError('');
+      setUpdatedAt(new Date());
+      setPending(data.filter((r) => OPEN_STATUSES.includes(r.status)).length);
+    },
+    [setPending],
+  );
 
   useEffect(() => {
+    let cancelled = false;
     api
       .get<Report[]>('/reports')
-      .then(({ data }) => {
-        setReports(data);
-        setPending(data.filter((r) => r.status === 'RECIBIDO' || r.status === 'EN_REVISION').length);
-      })
-      .catch((e) => setError(errorMessage(e)));
-    // Los títulos viven en la vista de la app. Si el rol no puede pedirla
-    // (Policía), la bandeja sigue funcionando con el tipo de fraude.
-    Promise.allSettled(
-      STATUSES.map((s) => api.get<Extra[]>('/community/reports', { params: { scope: 'queue', status: s } })),
-    ).then((results) => {
-      const found = new Map<number, Extra>();
-      for (const result of results) {
-        if (result.status !== 'fulfilled') continue;
-        for (const extra of result.value.data) found.set(extra.id, extra);
-      }
+      .then(({ data }) => !cancelled && apply(data))
+      .catch((e) => !cancelled && setError(errorMessage(e)));
+    // Los títulos llegan aparte: la lista no los espera.
+    void fetchTitles().then((found) => !cancelled && setExtras(found));
+    return () => {
+      cancelled = true;
+    };
+  }, [apply]);
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      const [{ data }, found] = await Promise.all([api.get<Report[]>('/reports'), fetchTitles()]);
+      apply(data);
       setExtras(found);
-    });
-  }, [setPending]);
+    } catch (e) {
+      // Con una lista ya en pantalla no se borra: se avisa y se conserva.
+      if (reports) toast.error('No se pudo actualizar la lista', { description: errorMessage(e) });
+      else setError(errorMessage(e));
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   // "/" lleva al buscador, salvo que ya se esté escribiendo en algún campo.
   useEffect(() => {
@@ -88,230 +131,209 @@ export default function ReportsPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const counts = useMemo(() => {
-    const by: Record<string, number> = {};
-    for (const r of reports ?? []) by[r.status] = (by[r.status] ?? 0) + 1;
-    return by;
-  }, [reports]);
+  const counts = useMemo(() => (reports ? countByStatus(reports) : undefined), [reports]);
+  const featured = useMemo(
+    () => (reports ? (moderator ? nextToReview(reports) : latestValidated(reports)) : undefined),
+    [reports, moderator],
+  );
 
+  const statuses = queues.find((q) => q.id === queue)?.statuses;
   const visible = useMemo(() => {
-    const words = normalize(query).split(/\s+/).filter(Boolean);
-    return (reports ?? []).filter((r) => {
-      if (status !== 'ALL' && r.status !== status) return false;
-      if (risk !== 'ALL' && r.riskLevel !== risk) return false;
-      if (words.length === 0) return true;
-      const extra = extras.get(r.id);
-      const haystack = normalize(
-        [folio(r.id, r.createdAt), `#${r.id}`, extra?.title, extra?.city, r.fraudType, r.description, ...(r.urls ?? [])].join(' '),
-      );
-      return words.every((w) => haystack.includes(w));
-    });
-  }, [reports, extras, query, status, risk]);
+    const matching = (reports ?? []).filter(
+      (r) =>
+        (!statuses || statuses.includes(r.status)) &&
+        (risk === 'ALL' || r.riskLevel === risk) &&
+        matchesQuery(r, extras.get(r.id), query),
+    );
+    return sortReports(matching, sort, extras);
+  }, [reports, extras, statuses, query, risk, sort]);
 
-  const filtered = Boolean(query || status !== 'ALL' || risk !== 'ALL');
-  const pending = (counts.RECIBIDO ?? 0) + (counts.EN_REVISION ?? 0);
+  const filtered = Boolean(query.trim() || risk !== 'ALL');
+  const queueLabel = queues.find((q) => q.id === queue)?.label ?? 'Todos';
+  const loading = !reports && !error;
+
+  function showQueue(id: string) {
+    setQueue(id);
+    inbox.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function clearFilters() {
+    setQuery('');
+    setRisk('ALL');
+  }
 
   return (
     <>
       <PageHeader
-        title="Reportes"
+        title="Reportes de fraude"
         description={
-          !reports
-            ? 'Lo que la comunidad denuncia, del más reciente al más antiguo.'
-            : pending > 0
-              ? `${number.format(pending)} ${pending === 1 ? 'espera' : 'esperan'} revisión, de ${number.format(reports.length)} en total.`
-              : `Todo al día: ${number.format(reports.length)} reportes y ninguno pendiente.`
+          updatedAt
+            ? `Datos actualizados el ${today.format(updatedAt)} a las ${clock.format(updatedAt)}.`
+            : 'Denuncias que la comunidad envía desde la app de ZeroScam.'
+        }
+        actions={
+          reports && (
+            <Button onClick={() => void refresh()} loading={refreshing}>
+              <RotateCw aria-hidden />
+              Actualizar
+            </Button>
+          )
         }
       />
 
-      <FilterTabs
-        aria-label="Filtrar por estado"
-        value={status}
-        onValueChange={setStatus}
-        items={[
-          { value: 'ALL', label: 'Todos', count: reports?.length },
-          ...STATUSES.map((s) => ({
-            value: s,
-            label: STATUS_LABEL[s],
-            count: reports ? (counts[s] ?? 0) : undefined,
-            dot: STATUS_VAR[s],
-          })),
-        ]}
-      />
-
-      <div className="flex flex-wrap items-center gap-2 py-3">
-        <div className="relative min-w-56 flex-1">
-          <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
-          <Input
-            ref={search}
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => event.key === 'Escape' && event.currentTarget.blur()}
-            placeholder="Folio, título, tipo, ciudad o enlace…"
-            aria-label="Buscar reportes"
-            className="pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
-          />
-          {!query && <Kbd className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2">/</Kbd>}
-        </div>
-        <Select
-          aria-label="Filtrar por nivel de riesgo"
-          value={risk}
-          onValueChange={setRisk}
-          className="w-44"
-          options={[
-            { value: 'ALL', label: 'Cualquier riesgo' },
-            { value: 'NO_EVALUADO', label: RISK_LABEL.NO_EVALUADO },
-            ...RISK_LEVELS.map((level) => ({ value: level, label: RISK_LABEL[level] })),
-          ]}
-        />
-      </div>
-
-      <div className="overflow-hidden rounded-xl bg-surface shadow-card">
-        <div className={cn('hidden items-center gap-4 border-b border-line px-4 py-2 text-xs text-muted md:grid', COLUMNS)}>
-          <span>Folio</span>
-          <span>Reporte</span>
-          <span>Estado</span>
-          <span>Riesgo</span>
-          <span>Recibido</span>
-        </div>
-
-        {error && (
+      {error && !reports ? (
+        <div className="rounded-md border-2 border-danger">
           <EmptyState
             tone="danger"
             icon={<TriangleAlert />}
             title="No se pudieron cargar los reportes"
             description={error}
-            action={<Button onClick={() => window.location.reload()}>Reintentar</Button>}
-          />
-        )}
-
-        {!error && !reports && (
-          <ul aria-busy aria-label="Cargando reportes">
-            {Array.from({ length: 7 }, (_, i) => (
-              <li key={i} className={cn('grid items-center gap-4 border-b border-line px-4 py-3.5 last:border-0', COLUMNS)}>
-                <Skeleton className="hidden h-3.5 w-24 md:block" />
-                <span className="grid gap-2">
-                  <Skeleton className="h-3.5 w-2/5" />
-                  <Skeleton className="h-3 w-4/5" />
-                </span>
-                <Skeleton className="hidden h-5 w-20 rounded-full md:block" />
-                <Skeleton className="hidden h-3.5 w-16 md:block" />
-                <Skeleton className="hidden h-3.5 w-14 md:block" />
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {reports?.length === 0 && (
-          <EmptyState
-            icon={<Inbox />}
-            title="Todavía no hay reportes"
-            description="Cuando alguien denuncie un fraude desde la app aparecerá aquí, listo para revisarse."
-          />
-        )}
-
-        {reports && reports.length > 0 && visible.length === 0 && (
-          <EmptyState
-            icon={<SearchX />}
-            title="Nada coincide con esos filtros"
             action={
-              <Button
-                onClick={() => {
-                  setQuery('');
-                  setStatus('ALL');
-                  setRisk('ALL');
-                }}
-              >
-                Quitar filtros
+              <Button variant="primary" onClick={() => void refresh()} loading={refreshing}>
+                Intentar de nuevo
               </Button>
             }
           />
+        </div>
+      ) : (
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8">
+          <NextReport
+            report={featured}
+            extra={featured ? extras.get(featured.id) : undefined}
+            moderator={moderator}
+            loading={loading}
+            onShowQueue={() => showQueue(queues[0].id)}
+          />
+          <QueueSummary queues={queues} counts={counts} total={reports?.length} active={queue} onSelect={showQueue} />
+        </div>
+      )}
+
+      <section ref={inbox} aria-labelledby="inbox-title" className="mt-14 scroll-mt-6">
+        <h2 id="inbox-title" className="text-[1.75rem] leading-tight font-bold tracking-[-0.01em]">
+          Bandeja de reportes
+        </h2>
+
+        <div className="mt-4">
+          <FilterTabs
+            aria-label="Bandeja"
+            value={queue}
+            onValueChange={setQueue}
+            items={[
+              ...queues.map((q) => ({
+                value: q.id,
+                label: q.label,
+                count: counts ? q.statuses.reduce((sum, s) => sum + (counts[s] ?? 0), 0) : undefined,
+              })),
+              { value: ALL, label: 'Todos', count: reports?.length },
+            ]}
+          />
+        </div>
+
+        <div className="mt-6 grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_13rem_16rem]">
+          <Field label="Buscar" className="sm:col-span-2 lg:col-span-1">
+            <span className="relative block">
+              <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-muted" />
+              <Input
+                ref={search}
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => event.key === 'Escape' && event.currentTarget.blur()}
+                placeholder="Folio, título, tipo de fraude, ciudad o enlace"
+                className="pl-10 [&::-webkit-search-cancel-button]:hidden"
+              />
+            </span>
+          </Field>
+          <Field label="Riesgo">
+            <Select
+              aria-label="Riesgo"
+              value={risk}
+              onValueChange={setRisk}
+              options={[
+                { value: 'ALL', label: 'Cualquier nivel' },
+                { value: 'NO_EVALUADO', label: RISK_LABEL.NO_EVALUADO },
+                ...RISK_LEVELS.map((level) => ({ value: level, label: RISK_LABEL[level] })),
+              ]}
+            />
+          </Field>
+          <Field label="Ordenar por">
+            <Select
+              aria-label="Ordenar por"
+              value={sort}
+              onValueChange={(next) => setSort(next as Sort)}
+              options={SORTS.filter((s) => s !== 'support' || extras.size > 0).map((s) => ({ value: s, label: SORT_LABEL[s] }))}
+            />
+          </Field>
+        </div>
+
+        {reports && reports.length > 0 && (
+          <p className="tnum mt-8 mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[17px]" aria-live="polite">
+            <span>
+              <strong>{plural(visible.length, 'reporte', 'reportes')}</strong>
+              {queue !== ALL && ` en «${queueLabel}»`}
+              {filtered && ' con estos filtros'}
+            </span>
+            {filtered && (
+              <button type="button" onClick={clearFilters} className="link text-[15px]">
+                Quitar filtros
+              </button>
+            )}
+          </p>
+        )}
+
+        {loading && (
+          <div aria-busy aria-label="Cargando reportes" className="mt-8 border-t-2 border-ink">
+            {Array.from({ length: 5 }, (_, i) => (
+              <div key={i} className="grid gap-2 border-b border-line py-5">
+                <Skeleton className="h-4 w-2/5" />
+                <Skeleton className="h-3.5 w-3/5" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {reports?.length === 0 && (
+          <div className="mt-8 rounded-md border border-line-strong">
+            <EmptyState
+              icon={<Inbox />}
+              title="Todavía no hay reportes"
+              description={
+                moderator
+                  ? 'Cuando alguien denuncie un fraude desde la app aparecerá aquí, listo para revisarse.'
+                  : 'Cuando el equipo valide un reporte aparecerá aquí.'
+              }
+            />
+          </div>
+        )}
+
+        {reports && reports.length > 0 && visible.length === 0 && (
+          <div className="rounded-md border border-line-strong">
+            {filtered ? (
+              <EmptyState
+                icon={<SearchX />}
+                title="Ningún reporte coincide con la búsqueda o los filtros"
+                action={<Button onClick={clearFilters}>Quitar filtros</Button>}
+              />
+            ) : (
+              <EmptyState icon={<Inbox />} title={EMPTY_QUEUE[queue] ?? 'No hay reportes aquí.'} />
+            )}
+          </div>
         )}
 
         {visible.length > 0 && (
-          <ul className="arrive">
-            {visible.map((report) => {
-              const extra = extras.get(report.id);
-              const unread = report.status === 'RECIBIDO';
-              return (
-                <li key={report.id} className="border-b border-line last:border-0">
-                  <Link
-                    href={`/reportes/${report.id}`}
-                    className={cn(
-                      'group grid items-center gap-x-4 gap-y-2 px-4 py-3 outline-none transition-colors duration-100 hover:bg-ink/[0.035] focus-visible:bg-ink/[0.05] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-ink',
-                      COLUMNS,
-                    )}
-                  >
-                    <span className="flex items-center gap-2 font-mono text-xs text-muted">
-                      <span aria-hidden className={cn('size-1.5 rounded-full', unread ? 'bg-accent' : 'bg-transparent')} />
-                      {folio(report.id, report.createdAt)}
-                      {unread && <span className="sr-only">(sin revisar)</span>}
-                    </span>
-
-                    <span className="grid min-w-0 gap-0.5">
-                      <span className={cn('truncate', unread ? 'font-semibold' : 'font-medium')}>
-                        {extra?.title ?? report.fraudType}
-                      </span>
-                      <span className="truncate text-[13px] text-muted">{report.description}</span>
-                      <span className="flex items-center gap-3 pt-0.5 text-xs text-muted">
-                        {extra && (
-                          <span className="truncate">
-                            {report.fraudType}
-                            {extra.city && ` · ${extra.city}`}
-                          </span>
-                        )}
-                        {(report.urls?.length ?? 0) > 0 && (
-                          <span className="flex items-center gap-1" title="Enlaces reportados">
-                            <Link2 className="size-3" />
-                            {report.urls!.length}
-                          </span>
-                        )}
-                        {(report.evidenceUrls?.length ?? 0) > 0 && (
-                          <span className="flex items-center gap-1" title="Archivos de evidencia">
-                            <Paperclip className="size-3" />
-                            {report.evidenceUrls!.length}
-                          </span>
-                        )}
-                        {extra && extra.confirmations > 0 && (
-                          <span className="flex items-center gap-1" title="Personas que dijeron «Yo también»">
-                            <Users className="size-3" />
-                            {extra.confirmations}
-                          </span>
-                        )}
-                        {extra && extra.comments > 0 && (
-                          <span className="flex items-center gap-1" title="Comentarios">
-                            <MessageSquare className="size-3" />
-                            {extra.comments}
-                          </span>
-                        )}
-                      </span>
-                    </span>
-
-                    <span className="flex flex-wrap items-center gap-x-4 gap-y-2 md:contents">
-                      <StatusBadge status={report.status} className="justify-self-start" />
-                      <RiskMeter level={report.riskLevel} />
-                      <time dateTime={report.createdAt} className="tnum text-[13px] text-muted">
-                        {timeAgo(report.createdAt)}
-                      </time>
-                    </span>
-                    <ChevronRight
-                      aria-hidden
-                      className="hidden size-4 text-muted opacity-0 transition-opacity duration-100 group-hover:opacity-100 group-focus-visible:opacity-100 md:block"
-                    />
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          <ReportTable
+            reports={visible}
+            extras={extras}
+            caption={`Reportes ${queue === ALL ? 'de todas las bandejas' : `en «${queueLabel}»`}, ordenados por ${SORT_LABEL[sort].toLowerCase()}`}
+          />
         )}
-      </div>
 
-      {reports && filtered && visible.length > 0 && (
-        <p className="tnum mt-3 text-[13px] text-muted">
-          {number.format(visible.length)} de {number.format(reports.length)} reportes
-        </p>
-      )}
+        {reports && visible.length > 0 && (
+          <p className="tnum mt-4 text-[15px] text-ink-2">
+            Mostrando {number.format(visible.length)} de {plural(reports.length, 'reporte', 'reportes')} en total.
+          </p>
+        )}
+      </section>
     </>
   );
 }

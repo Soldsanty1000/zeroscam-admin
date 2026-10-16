@@ -1,24 +1,30 @@
 @import 'tailwindcss';
 
-/* Una sola familia servida desde el propio panel (la red puede no tener salida). */
-@import '@fontsource-variable/geist/wght.css';
-@import '@fontsource-variable/geist-mono/wght.css';
+/* Atkinson Hyperlegible: hecha para que ningún carácter se confunda con otro
+   (l, I y 1; 0 y O; rn y m). Es justo lo que hace falta para leer folios y
+   dominios falsos como "paypa1.com". Servida desde el propio panel. */
+@import '@fontsource-variable/atkinson-hyperlegible-next/wght.css';
+@import '@fontsource-variable/atkinson-hyperlegible-mono/wght.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ---------- Tokens ----------
-   Panel de trabajo: neutros fríos teñidos del azul de la app, y su ámbar solo
-   para la acción principal, la selección y los avisos. */
+   Estilo institucional: página blanca, cabecera en el azul de la app y su
+   ámbar solo para la acción principal, el foco y los avisos. */
 :root {
-  --bg: #fcfcfd;
+  --bg: #ffffff;
   --panel: #f5f6f8;
   --surface: #ffffff;
-  --sunk: #f1f2f5;
+  --sunk: #f2f3f6;
+  --masthead: #0a1330;
+  --masthead-ink: #ffffff;
+  /* Borde de los campos: contraste de 4.9:1 contra blanco, se ve sin buscarlo. */
+  --field: #687089;
   --ink: #0a1330;
   --ink-2: #3f4863;
   --muted: #687089;
-  --line: #e7e9ef;
-  --line-strong: #d2d6e0;
+  --line: #dcdfe7;
+  --line-strong: #b9bfcd;
   --accent: #f5a623;
   --accent-ink: #94560a;
   --accent-wash: #fdf1d9;
@@ -59,6 +65,9 @@
   --panel: #080f28;
   --surface: #101b40;
   --sunk: #0d1737;
+  --masthead: #050b22;
+  --masthead-ink: #f1f3f9;
+  --field: #5d6994;
   --ink: #f1f3f9;
   --ink-2: #bcc3d8;
   --muted: #8c95b4;
@@ -110,9 +119,12 @@
   --color-danger: var(--danger);
   --color-danger-wash: var(--danger-wash);
   --color-ok: var(--ok);
+  --color-masthead: var(--masthead);
+  --color-masthead-ink: var(--masthead-ink);
+  --color-field: var(--field);
 
-  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', monospace;
+  --font-sans: 'Atkinson Hyperlegible Next Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Atkinson Hyperlegible Mono Variable', ui-monospace, 'SF Mono', monospace;
 
   --shadow-card: var(--shadow-card);
   --shadow-pop: var(--shadow-pop);
@@ -131,7 +143,7 @@
     background: var(--bg);
     color: var(--ink);
     font-family: var(--font-sans);
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -156,9 +168,10 @@
     caret-color: var(--accent-ink);
   }
 
+  /* Foco institucional: ámbar grueso, se ve sobre blanco y sobre la cabecera. */
   :focus-visible {
-    outline: 2px solid var(--accent-ink);
-    outline-offset: 2px;
+    outline: 3px solid var(--accent);
+    outline-offset: 0;
   }
 
   h1,
@@ -187,6 +200,27 @@
 }
 
 @layer components {
+  /* Enlace de texto: siempre subrayado, para que se sepa que se puede abrir.
+     Con foco se pinta de ámbar, como en los portales de gobierno. */
+  .link {
+    color: var(--ink);
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
+  .link:hover {
+    text-decoration-thickness: 3px;
+  }
+  .link:focus-visible {
+    outline: none;
+    background: var(--accent);
+    color: var(--on-accent);
+    text-decoration: none;
+    box-shadow:
+      0 -2px var(--accent),
+      0 4px var(--on-accent);
+  }
+
   /* Paneles flotantes (menú, selector, tooltip): salen de lo que los abrió. */
   .pop {
     transform-origin: var(--transform-origin);
@@ -311,34 +345,12 @@
   }
 }
 
-/* Login: el cero tachado se traza una sola vez al llegar. */
-.login-mark ellipse,
-.login-mark path {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: draw 900ms var(--ease-in-out) 150ms forwards;
-}
-.login-mark path {
-  animation-duration: 500ms;
-  animation-delay: 800ms;
-}
-@keyframes draw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
+/* Cursor del código de verificación. */
 .caret-blink {
   animation: blink 1s steps(1) infinite;
 }
 @keyframes blink {
   50% {
     opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .login-mark ellipse,
-  .login-mark path {
-    animation: none;
-    stroke-dashoffset: 0;
   }
 }

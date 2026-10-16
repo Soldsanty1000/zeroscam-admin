@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion, useAnimate, useReducedMotion, type Variants } from 'motion/react';
 import { OTPInput, type SlotProps } from 'input-otp';
-import { ArrowBigUp, ArrowLeft, Check, CircleAlert, CircleCheck, Eye, EyeOff, LoaderCircle } from 'lucide-react';
-import { errorMessage, login, verifyCode, type TwoFactorChallenge } from '@/lib/api';
+import { ArrowBigUp, ArrowLeft, Check, CircleAlert, CircleCheck, Eye, EyeOff, Info, LoaderCircle } from 'lucide-react';
+import { SkipLink } from '@/components/app-shell';
+import { PanelAccessError, describeLoginError, httpStatus, login, verifyCode, type TwoFactorChallenge } from '@/lib/api';
+import { CODE_EXHAUSTED_MESSAGE, LOGIN_NOTICES, MAX_CODE_ATTEMPTS, isLoginNotice } from '@/lib/login-errors';
 import { cn } from '@/lib/utils';
 import { InspectionStage } from './inspection-stage';
 import './login.css';
@@ -33,20 +35,29 @@ const itemVariants: Variants = {
 };
 
 const control =
-  'h-[52px] w-full rounded-[10px] border border-(color:--field) bg-surface px-4 text-[17px] text-ink transition-[border-color,box-shadow] duration-200 ease-out outline-none placeholder:text-muted hover:border-ink-2 focus-visible:border-ink focus-visible:shadow-[0_0_0_3px_var(--accent)] focus-visible:outline-none';
+  'h-[52px] w-full rounded-[10px] border border-field bg-surface px-4 text-[17px] text-ink transition-[border-color,box-shadow] duration-200 ease-out outline-none placeholder:text-muted hover:border-ink-2 focus-visible:border-ink focus-visible:shadow-[0_0_0_3px_var(--accent)] focus-visible:outline-none';
 
 export default function LoginPage() {
   return (
-    <div className="login-page grid min-h-dvh bg-bg lg:grid-cols-[minmax(0,1.3fr)_minmax(30rem,1fr)]">
+    <div className="grid min-h-dvh bg-bg lg:grid-cols-[minmax(0,1.3fr)_minmax(30rem,1fr)]">
+      <SkipLink />
       <InspectionStage />
 
-      <main className="relative z-10 flex flex-col px-5 pt-10 pb-8 sm:px-10 lg:min-h-dvh lg:px-14 lg:pt-12 xl:px-20 lg:shadow-[-40px_0_90px_-50px_rgb(5_11_34/0.6)] dark:lg:border-l dark:lg:border-white/8">
+      <main
+        id="contenido"
+        tabIndex={-1}
+        className="relative z-10 flex flex-col px-5 pt-10 pb-8 outline-none sm:px-10 lg:min-h-dvh lg:px-14 lg:pt-12 xl:px-20 lg:shadow-[-40px_0_90px_-50px_rgb(5_11_34/0.6)] dark:lg:border-l dark:lg:border-white/8"
+      >
         <div className="my-auto w-full max-w-[25rem] py-4 lg:py-10">
-          <LoginPanel />
+          {/* `useSearchParams` pide un límite de Suspense. */}
+          <Suspense fallback={<div className="min-h-[30rem]" />}>
+            <LoginPanel />
+          </Suspense>
         </div>
 
         <p className="mt-10 max-w-[56ch] border-t border-line pt-6 text-sm text-ink-2 lg:hidden">
-          Uso exclusivo del personal autorizado.
+          Uso exclusivo del personal autorizado. Los cambios de estado, de riesgo y de cuentas quedan registrados en la bitácora de
+          auditoría.
         </p>
       </main>
     </div>
@@ -55,10 +66,16 @@ export default function LoginPage() {
 
 function LoginPanel() {
   const router = useRouter();
+  // Por qué se llegó aquí (sesión cerrada por inactividad, sin acceso…). Solo
+  // se aceptan avisos conocidos: el texto nunca sale de la URL.
+  const aviso = useSearchParams().get('aviso');
+  const notice = isLoginNotice(aviso) ? aviso : null;
   const reduced = useReducedMotion();
   const [scope, animate] = useAnimate<HTMLDivElement>();
 
   const [error, setError] = useState('');
+  // Códigos equivocados en este desafío; al llegar al tope se vuelve a pedir el login.
+  const [failedCodes, setFailedCodes] = useState(0);
   const [sending, setSending] = useState(false);
   const [granted, setGranted] = useState(false);
   // Con verificación en dos pasos el login regresa un desafío en vez de tokens.
@@ -88,6 +105,7 @@ function LoginPanel() {
       if (pending) {
         setDirection(1);
         setChallenge(pending);
+        setFailedCodes(0);
         setSending(false);
         return;
       }
@@ -95,8 +113,9 @@ function LoginPanel() {
       setGranted(true);
       router.replace('/');
     } catch (e) {
+      // Un texto fijo por tipo de fallo: el del servidor no se muestra tal cual.
       setSending(false);
-      fail(errorMessage(e));
+      fail(describeLoginError(e));
     }
   }
 
@@ -113,7 +132,25 @@ function LoginPanel() {
     } catch (e) {
       setCode('');
       setSending(false);
-      fail(errorMessage(e));
+      if (e instanceof PanelAccessError) {
+        // La sesión ya se cerró: no tiene caso seguir en el paso del código.
+        setDirection(-1);
+        setChallenge(null);
+        fail(e.message);
+        return;
+      }
+      // Solo cuenta el código rechazado, no una caída de la red.
+      const rejected = httpStatus(e) === 400 || httpStatus(e) === 401;
+      const failures = rejected ? failedCodes + 1 : failedCodes;
+      if (failures >= MAX_CODE_ATTEMPTS) {
+        setDirection(-1);
+        setChallenge(null);
+        setFailedCodes(0);
+        fail(CODE_EXHAUSTED_MESSAGE);
+        return;
+      }
+      setFailedCodes(failures);
+      fail(describeLoginError(e, 'code', MAX_CODE_ATTEMPTS - failures));
     }
   }
 
@@ -121,10 +158,18 @@ function LoginPanel() {
     setDirection(-1);
     setChallenge(null);
     setCode('');
+    setFailedCodes(0);
     setError('');
   }
 
   const buttonState = granted ? 'done' : sending ? 'loading' : 'idle';
+
+  // Sin error, el aviso que trajo la URL (si lo hay).
+  const alert = error
+    ? { tone: 'danger' as const, text: error }
+    : notice && !challenge
+      ? { tone: notice === 'sin-acceso' ? ('danger' as const) : ('info' as const), text: LOGIN_NOTICES[notice] }
+      : null;
 
   return (
     <div ref={scope}>
@@ -137,7 +182,7 @@ function LoginPanel() {
             onCode={setCode}
             onSubmit={handleCode}
             onBack={backToPassword}
-            error={error}
+            alert={alert}
             state={buttonState}
           />
         ) : (
@@ -155,10 +200,10 @@ function LoginPanel() {
               <h1 id="login-title" className="text-[2.25rem] leading-[1.05] font-bold tracking-[-0.025em] sm:text-[2.625rem]">
                 Iniciar sesión
               </h1>
-              <p className="mt-3 text-[17px] text-ink-2">Acceso para Administración, Owner y Policía Cibernética.</p>
+              <p className="mt-3 text-[17px] text-ink-2">Solo para cuentas de Administración, Owner y Policía Cibernética.</p>
             </motion.div>
 
-            <Alert error={error} />
+            <Alert alert={alert} />
 
             <motion.div variants={itemVariants} className="mt-8">
               <EmailField />
@@ -182,22 +227,34 @@ function LoginPanel() {
   );
 }
 
+type AlertContent = { tone: 'danger' | 'info'; text: string } | null;
+
 /** Aviso que se abre en su lugar: empuja lo de abajo en vez de aparecer de golpe. */
-function Alert({ error }: { error: string }) {
+function Alert({ alert }: { alert: AlertContent }) {
   return (
     <AnimatePresence initial={false}>
-      {error && (
+      {alert && (
         <motion.div
-          key={error}
+          key={alert.text}
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: 'auto', opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
           transition={{ duration: 0.3, ease: EASE_OUT }}
           className="overflow-hidden"
         >
-          <p role="alert" className="mt-6 flex gap-2.5 rounded-[10px] bg-danger-wash px-4 py-3 text-[15px] leading-snug text-danger">
-            <CircleAlert aria-hidden className="mt-px size-[18px] shrink-0" />
-            {error}
+          <p
+            role={alert.tone === 'danger' ? 'alert' : 'status'}
+            className={cn(
+              'mt-6 flex gap-2.5 rounded-[10px] px-4 py-3 text-[15px] leading-snug',
+              alert.tone === 'danger' ? 'bg-danger-wash text-danger' : 'bg-sunk text-ink-2',
+            )}
+          >
+            {alert.tone === 'danger' ? (
+              <CircleAlert aria-hidden className="mt-px size-[18px] shrink-0" />
+            ) : (
+              <Info aria-hidden className="mt-px size-[18px] shrink-0" />
+            )}
+            {alert.text}
           </p>
         </motion.div>
       )}
@@ -354,7 +411,7 @@ function SubmitButton({ state, disabled, children }: { state: ButtonState; disab
   );
 }
 
-/** Segundos que le quedan al código desde que llegó el desafío. Solo se muestra: no bloquea nada. */
+/** Segundos que le quedan al código desde que llegó el desafío. */
 function useCountdown(total: number) {
   const [left, setLeft] = useState(total);
   useEffect(() => {
@@ -375,7 +432,7 @@ function CodeStep({
   onCode,
   onSubmit,
   onBack,
-  error,
+  alert,
   state,
 }: {
   destination: string;
@@ -383,7 +440,7 @@ function CodeStep({
   onCode: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onBack: () => void;
-  error: string;
+  alert: AlertContent;
   state: ButtonState;
 }) {
   const form = useRef<HTMLFormElement>(null);
@@ -408,7 +465,7 @@ function CodeStep({
         <button
           type="button"
           onClick={onBack}
-          className="group -ml-1 mb-8 inline-flex items-center gap-1.5 rounded-sm px-1 text-[15px] font-semibold text-ink-2 transition-colors duration-150 outline-none hover:text-ink focus-visible:outline-3 focus-visible:outline-accent"
+          className="group -ml-1 mb-8 inline-flex items-center gap-1.5 rounded-sm px-1 text-[15px] font-semibold text-ink-2 transition-colors duration-150 hover:text-ink"
         >
           <ArrowLeft aria-hidden className="size-4 transition-transform duration-200 ease-out group-hover:-translate-x-0.5" />
           Usar otra cuenta
@@ -430,16 +487,17 @@ function CodeStep({
           // Al completar los 6 dígitos se envía solo: no hace falta buscar el botón.
           onComplete={() => form.current?.requestSubmit()}
           autoFocus
+          disabled={expired}
           inputMode="numeric"
           pattern="^[0-9]*$"
           aria-label="Código de 6 dígitos"
-          containerClassName="flex items-center gap-2"
+          containerClassName="flex items-center gap-2 has-[:disabled]:opacity-50"
           render={({ slots }) => (
             <>
               {slots.slice(0, 3).map((slot, index) => (
                 <Slot key={index} {...slot} />
               ))}
-              <span aria-hidden className="h-0.5 w-3 shrink-0 rounded-full bg-(--field)" />
+              <span aria-hidden className="h-0.5 w-3 shrink-0 rounded-full bg-field" />
               {slots.slice(3).map((slot, index) => (
                 <Slot key={index + 3} {...slot} />
               ))}
@@ -477,10 +535,10 @@ function CodeStep({
         </p>
       </motion.div>
 
-      <Alert error={error} />
+      <Alert alert={alert} />
 
       <motion.div variants={itemVariants} className="mt-8">
-        <SubmitButton state={state} disabled={code.length < 6}>
+        <SubmitButton state={state} disabled={code.length < 6 || expired}>
           Verificar e ingresar
         </SubmitButton>
       </motion.div>
@@ -491,7 +549,7 @@ function CodeStep({
 /** Casilla del código. El marco del foco viaja de una casilla a la siguiente. */
 function Slot({ char, hasFakeCaret, isActive }: SlotProps) {
   return (
-    <span className="relative grid h-[62px] min-w-0 flex-1 place-items-center rounded-[10px] border border-(color:--field) bg-surface font-mono text-[26px] font-semibold text-ink">
+    <span className="relative grid h-[62px] min-w-0 flex-1 place-items-center rounded-[10px] border border-field bg-surface font-mono text-[26px] font-semibold text-ink">
       {isActive && (
         <motion.span
           layoutId="otp-focus"

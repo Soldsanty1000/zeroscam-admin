@@ -25,13 +25,13 @@ export function FilterTabs({
     <Base.Root value={value} onValueChange={(next) => onValueChange(String(next))}>
       <Base.List
         aria-label={ariaLabel}
-        className="relative flex gap-1 overflow-x-auto border-b border-line [scrollbar-width:none]"
+        className="relative flex gap-2 overflow-x-auto border-b-2 border-line [scrollbar-width:none]"
       >
         {items.map((item) => (
           <Base.Tab
             key={item.value}
             value={item.value}
-            className="group flex h-10 shrink-0 select-none items-center gap-2 px-2.5 text-sm text-muted outline-none transition-colors duration-150 hover:text-ink focus-visible:rounded-md focus-visible:outline-2 focus-visible:outline-accent-ink data-[active]:font-medium data-[active]:text-ink"
+            className="group flex h-12 shrink-0 select-none items-center gap-2 px-3 text-base font-semibold text-ink-2 outline-none transition-colors duration-150 hover:text-ink focus-visible:bg-accent focus-visible:text-on-accent data-[active]:text-ink"
           >
             {item.dot && <span aria-hidden className="size-1.5 rounded-full" style={{ background: item.dot }} />}
             {item.label}
@@ -39,14 +39,14 @@ export function FilterTabs({
               <NumberFlow
                 value={item.count}
                 className={cn(
-                  'rounded-full px-1.5 text-xs transition-colors duration-150',
-                  'bg-ink/6 text-muted group-data-[active]:bg-ink group-data-[active]:text-bg',
+                  'rounded-sm px-1.5 text-sm leading-6 transition-colors duration-150',
+                  'bg-ink/8 text-ink-2 group-data-[active]:bg-ink group-data-[active]:text-bg',
                 )}
               />
             )}
           </Base.Tab>
         ))}
-        <Base.Indicator className="absolute bottom-0 left-0 h-0.5 w-(--active-tab-width) translate-x-(--active-tab-left) rounded-full bg-ink transition-[translate,width] duration-250 ease-(--ease-in-out)" />
+        <Base.Indicator className="absolute -bottom-0.5 left-0 h-1 w-(--active-tab-width) translate-x-(--active-tab-left) bg-ink transition-[translate,width] duration-250 ease-(--ease-in-out)" />
       </Base.List>
     </Base.Root>
   );
