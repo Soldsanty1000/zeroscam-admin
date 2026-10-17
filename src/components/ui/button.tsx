@@ -4,18 +4,23 @@ import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
 export const buttonVariants = cva(
-  // Se hunde al presionar (0.97, 160 ms): confirma que la interfaz escuchó.
-  'relative inline-flex shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-medium transition-[transform,background-color,box-shadow,color] duration-150 ease-out enabled:active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
+  // Mismo lenguaje que el botón del login: los que tienen relieve se hunden
+  // sobre su sombra al presionar; los planos se encogen (0.97).
+  'group relative inline-flex shrink-0 select-none items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[9px] font-semibold transition-[transform,background-color,box-shadow,color,filter] duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
-        // Ámbar: la acción principal de la pantalla, una sola.
+        // Ámbar: la acción principal de la pantalla, una sola. Con relieve y
+        // el brillo que la cruza al pasar el puntero, como en el login.
         primary:
-          'bg-accent text-on-accent shadow-[inset_0_1px_0_rgb(255_255_255/0.35),0_1px_2px_rgb(10_19_48/0.2)] hover:brightness-[1.04]',
-        solid: 'bg-ink text-bg hover:bg-ink/90',
-        outline: 'bg-surface text-ink shadow-card hover:bg-sunk',
-        ghost: 'text-ink-2 hover:bg-ink/6 hover:text-ink',
-        danger: 'bg-danger-wash text-danger hover:bg-danger hover:text-white dark:hover:text-bg',
+          'bg-accent text-on-accent shadow-[0_2px_0_var(--accent-ink)] enabled:hover:brightness-[1.03] enabled:active:translate-y-0.5 enabled:active:shadow-none',
+        solid:
+          'bg-ink text-bg shadow-[0_2px_0_rgb(0_0_0/0.35)] enabled:hover:bg-ink/90 enabled:active:translate-y-0.5 enabled:active:shadow-none',
+        outline:
+          'bg-surface text-ink shadow-[var(--ring),0_2px_0_var(--line-strong)] enabled:hover:bg-sunk enabled:active:translate-y-0.5 enabled:active:shadow-[var(--ring)]',
+        ghost: 'text-ink-2 enabled:hover:bg-ink/6 enabled:hover:text-ink enabled:active:scale-[0.97]',
+        danger:
+          'bg-danger-wash text-danger enabled:hover:bg-danger enabled:hover:text-white enabled:active:scale-[0.97] dark:enabled:hover:text-bg',
       },
       size: {
         sm: 'h-8 px-2.5 text-[13px]',
@@ -44,8 +49,9 @@ export function Button({
       aria-busy={loading || undefined}
       {...props}
     >
+      {variant === 'primary' && <span aria-hidden className="sheen" />}
       {/* La etiqueta conserva su lugar mientras carga: el botón no cambia de ancho. */}
-      <span className={cn('inline-flex items-center gap-1.5 transition-opacity duration-150', loading && 'opacity-0')}>
+      <span className={cn('relative inline-flex items-center gap-1.5 transition-opacity duration-150', loading && 'opacity-0')}>
         {children}
       </span>
       {loading && <LoaderCircle aria-hidden className="spinner absolute" />}

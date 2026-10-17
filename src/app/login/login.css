@@ -1,6 +1,3 @@
-@import '@fontsource-variable/atkinson-hyperlegible-next/wght.css';
-@import '@fontsource-variable/atkinson-hyperlegible-mono/wght.css';
-
 /* Inicio de sesión: a la izquierda un banco de inspección que hace lo mismo
    que el panel (encontrar el carácter impostor en un dominio); a la derecha,
    la hoja del formulario. Todo lo de aquí solo se usa en /login. */
@@ -243,36 +240,13 @@
 
 /* ---------- Formulario ---------- */
 
-/* Brillo que cruza el botón principal al pasar el puntero. */
-.sheen {
-  position: absolute;
-  inset-block: 0;
-  left: 0;
-  width: 45%;
-  background: linear-gradient(100deg, transparent, rgb(255 255 255 / 0.5), transparent);
-  transform: translateX(-120%) skewX(-16deg);
-  pointer-events: none;
-}
-@media (hover: hover) {
-  .group:hover:enabled .sheen,
-  .group:enabled:hover .sheen {
-    animation: sheen 900ms var(--ease-out);
-  }
-}
-@keyframes sheen {
-  to {
-    transform: translateX(340%) skewX(-16deg);
-  }
-}
-
 .countdown-ring {
   transition: stroke-dashoffset 250ms linear;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .stage-field,
-  .domain-row,
-  .sheen {
+  .domain-row {
     animation: none !important;
   }
   .progress-fill {

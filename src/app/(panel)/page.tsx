@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight, Inbox, Link2, MessageSquare, Paperclip, Search, SearchX, TriangleAlert, Users } from 'lucide-react';
 import { PageHeader } from '@/components/app-shell';
+import { DomainText } from '@/components/domain';
 import { RiskMeter, StatusBadge, STATUS_VAR } from '@/components/badges';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/field';
@@ -230,7 +231,7 @@ export default function ReportsPage() {
         )}
 
         {visible.length > 0 && (
-          <ul className="arrive">
+          <ul className="stagger">
             {visible.map((report) => {
               const extra = extras.get(report.id);
               const unread = report.status === 'RECIBIDO';
@@ -239,7 +240,7 @@ export default function ReportsPage() {
                   <Link
                     href={`/reportes/${report.id}`}
                     className={cn(
-                      'group grid items-center gap-x-4 gap-y-2 px-4 py-3 outline-none transition-colors duration-100 hover:bg-ink/[0.035] focus-visible:bg-ink/[0.05] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-ink',
+                      'group grid items-center gap-x-4 gap-y-2 px-4 py-3 outline-none transition-colors duration-100 hover:bg-ink/[0.035] focus-visible:bg-ink/[0.05] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent',
                       COLUMNS,
                     )}
                   >
@@ -254,17 +255,18 @@ export default function ReportsPage() {
                         {extra?.title ?? report.fraudType}
                       </span>
                       <span className="truncate text-[13px] text-muted">{report.description}</span>
-                      <span className="flex items-center gap-3 pt-0.5 text-xs text-muted">
+                      <span className="flex min-w-0 items-center gap-3 overflow-hidden pt-0.5 text-xs text-muted">
                         {extra && (
-                          <span className="truncate">
+                          <span className="shrink-0">
                             {report.fraudType}
                             {extra.city && ` · ${extra.city}`}
                           </span>
                         )}
                         {(report.urls?.length ?? 0) > 0 && (
-                          <span className="flex items-center gap-1" title="Enlaces reportados">
-                            <Link2 className="size-3" />
-                            {report.urls!.length}
+                          <span className="flex min-w-0 items-center gap-1" title="Enlaces reportados">
+                            <Link2 className="size-3 shrink-0" />
+                            <DomainText url={report.urls![0]} className="block min-w-0 truncate text-[11.5px]" />
+                            {report.urls!.length > 1 && <span className="shrink-0">+{report.urls!.length - 1}</span>}
                           </span>
                         )}
                         {(report.evidenceUrls?.length ?? 0) > 0 && (

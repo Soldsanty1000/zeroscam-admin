@@ -203,7 +203,7 @@ export default function UsersPage() {
         )}
 
         {!error && users && users.length > 0 && (
-          <ul className="arrive">
+          <ul className="stagger">
             {users.map((user) => {
               const self = user.id === me?.id;
               const active = user.accountStatus === 'ACTIVO';

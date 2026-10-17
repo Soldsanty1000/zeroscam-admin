@@ -12,6 +12,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Field, Textarea } from '@/components/ui/field';
 import { EmptyState, Skeleton } from '@/components/ui/misc';
 import { API_URL, api, errorMessage } from '@/lib/api';
+import { DomainText } from '@/components/domain';
 import { RISK_LABEL, RISK_LEVELS, RISK_ORDER, STATUS_LABEL, defang, folio, formatDateTime, timeAgo } from '@/lib/format';
 import { isStaff, useSession } from '@/lib/session';
 import { cn } from '@/lib/utils';
@@ -174,7 +175,7 @@ export default function ReportPage() {
     <div className="arrive">
       <Link
         href="/"
-        className="-ml-1.5 mb-5 inline-flex h-7 items-center gap-1.5 rounded-md px-1.5 text-[13px] text-muted outline-none transition-colors duration-150 hover:text-ink focus-visible:outline-2 focus-visible:outline-accent-ink"
+        className="-ml-1.5 mb-5 inline-flex h-7 items-center gap-1.5 rounded-md px-1.5 text-[13px] text-muted outline-none transition-colors duration-150 hover:text-ink focus-visible:outline-3 focus-visible:outline-accent"
       >
         <ArrowLeft className="size-3.5" />
         Reportes
@@ -259,7 +260,7 @@ export default function ReportPage() {
                     </>
                   );
                   const shared =
-                    'block w-full rounded-lg text-left outline-none transition-transform duration-150 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-ink';
+                    'block w-full rounded-lg text-left outline-none transition-transform duration-150 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent';
                   return (
                     <li key={path}>
                       {isImage(path) ? (
@@ -558,7 +559,7 @@ function DefangedUrl({ url }: { url: string }) {
   const safe = defang(url);
   return (
     <div className="flex items-center gap-2 rounded-lg bg-sunk py-1 pr-1 pl-3">
-      <code className="min-w-0 flex-1 font-mono text-[13px] break-all">{safe}</code>
+      <DomainText url={url} className="min-w-0 flex-1 text-[13px] break-all" />
       <Button
         variant="ghost"
         size="icon"

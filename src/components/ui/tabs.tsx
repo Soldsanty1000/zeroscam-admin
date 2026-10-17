@@ -31,7 +31,7 @@ export function FilterTabs({
           <Base.Tab
             key={item.value}
             value={item.value}
-            className="group flex h-10 shrink-0 select-none items-center gap-2 px-2.5 text-sm text-muted outline-none transition-colors duration-150 hover:text-ink focus-visible:rounded-md focus-visible:outline-2 focus-visible:outline-accent-ink data-[active]:font-medium data-[active]:text-ink"
+            className="group flex h-10 shrink-0 select-none items-center gap-2 px-2.5 text-sm text-muted outline-none transition-colors duration-150 hover:text-ink focus-visible:rounded-md focus-visible:outline-3 focus-visible:outline-accent data-[active]:font-medium data-[active]:text-ink"
           >
             {item.dot && <span aria-hidden className="size-1.5 rounded-full" style={{ background: item.dot }} />}
             {item.label}

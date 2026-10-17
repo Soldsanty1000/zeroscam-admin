@@ -34,7 +34,7 @@ export function Select({
       <Base.Trigger
         aria-label={ariaLabel}
         className={cn(
-          'group inline-flex w-full select-none items-center justify-between gap-2 rounded-lg border border-line-strong bg-surface pr-2 pl-3 text-ink transition-[border-color,box-shadow,transform] duration-150 hover:border-muted/60 focus-visible:border-accent-ink focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-accent/30 enabled:active:scale-[0.98] data-[disabled]:opacity-50 data-[popup-open]:border-accent-ink',
+          'group inline-flex w-full select-none items-center justify-between gap-2 rounded-[9px] border border-line-strong bg-surface pr-2 pl-3 text-ink transition-[border-color,box-shadow,transform] duration-200 ease-out hover:border-field focus-visible:border-ink focus-visible:shadow-[0_0_0_3px_var(--accent)] focus-visible:outline-none enabled:active:scale-[0.98] data-[disabled]:opacity-50 data-[popup-open]:border-ink data-[popup-open]:shadow-[0_0_0_3px_var(--accent)]',
           size === 'sm' ? 'h-8 text-[13px]' : 'h-9 text-sm',
           className,
         )}

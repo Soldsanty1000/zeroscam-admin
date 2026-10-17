@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu } from '@base-ui/react/menu';
 import NumberFlow from '@number-flow/react';
+import { motion } from 'motion/react';
 import { ChartNoAxesColumn, Check, ChevronsUpDown, Inbox, LogOut, Monitor, Moon, Search, Sun, Users } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { logout } from '@/lib/api';
@@ -47,7 +48,7 @@ function AccountMenu({ compact = false }: { compact?: boolean }) {
       <Menu.Trigger
         aria-label="Cuenta y preferencias"
         className={cn(
-          'flex select-none items-center gap-2.5 rounded-lg text-left outline-none transition-[background-color,transform] duration-150 hover:bg-ink/6 focus-visible:outline-2 focus-visible:outline-accent-ink active:scale-[0.98] data-[popup-open]:bg-ink/6',
+          'flex select-none items-center gap-2.5 rounded-lg text-left outline-none transition-[background-color,transform] duration-150 hover:bg-ink/6 focus-visible:outline-3 focus-visible:outline-accent active:scale-[0.98] data-[popup-open]:bg-ink/6',
           compact ? 'p-1' : 'w-full p-2',
         )}
       >
@@ -117,8 +118,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-dvh lg:pl-60">
-      <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col border-r border-line bg-panel lg:flex">
-        <Link href="/" className="mx-2 mt-3 flex h-10 items-center rounded-lg px-2 outline-none focus-visible:outline-2 focus-visible:outline-accent-ink">
+      {/* La barra lateral es el escenario del login: azul profundo en los dos
+          temas. `dark` hace que todo lo de adentro use los tonos oscuros. */}
+      <aside className="dark abyss fixed inset-y-0 left-0 hidden w-60 flex-col border-r border-white/[0.06] text-ink lg:flex">
+        <Link href="/" className="mx-2 mt-3 flex h-10 items-center rounded-lg px-2 outline-none focus-visible:outline-3 focus-visible:outline-accent">
           <Brand />
         </Link>
 
@@ -126,7 +129,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             onClick={openCommand}
-            className="flex h-8 w-full items-center gap-2 rounded-lg bg-surface px-2.5 text-[13px] text-muted shadow-card transition-[transform,color] duration-150 hover:text-ink active:scale-[0.98]"
+            className="flex h-8 w-full items-center gap-2 rounded-lg bg-white/[0.06] px-2.5 text-[13px] text-muted shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)] transition-[transform,color,background-color] duration-150 hover:bg-white/[0.09] hover:text-ink active:scale-[0.98]"
           >
             <Search aria-hidden className="size-3.5" />
             <span className="flex-1 text-left">Buscar…</span>
@@ -141,24 +144,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               href={href}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-sm outline-none transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-accent-ink',
-                active ? 'bg-ink/8 font-medium text-ink' : 'text-ink-2 hover:bg-ink/5 hover:text-ink',
+                'relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm outline-none transition-colors duration-150 focus-visible:outline-3 focus-visible:outline-accent',
+                active ? 'font-semibold text-ink' : 'text-ink-2 hover:bg-white/[0.04] hover:text-ink',
               )}
             >
-              <Icon aria-hidden className={cn('size-4', active ? 'text-ink' : 'text-muted')} strokeWidth={active ? 2.25 : 2} />
-              <span className="flex-1">{label}</span>
+              {/* El fondo de la sección activa viaja a la nueva, con el mismo
+                  resorte que el foco de las casillas del código en el login. */}
+              {active && (
+                <motion.span
+                  layoutId="nav-active"
+                  aria-hidden
+                  className="absolute inset-0 rounded-lg bg-white/[0.08] shadow-[inset_2px_0_0_var(--accent)]"
+                  transition={{ type: 'spring', stiffness: 550, damping: 38 }}
+                />
+              )}
+              <Icon
+                aria-hidden
+                className={cn('relative size-4', active ? 'text-accent' : 'text-muted')}
+                strokeWidth={active ? 2.25 : 2}
+              />
+              <span className="relative flex-1">{label}</span>
               {href === '/' && pending !== null && pending > 0 && (
                 <NumberFlow
                   value={pending}
                   aria-label={`${pending} por revisar`}
-                  className="rounded-full bg-accent px-1.5 text-xs font-medium text-on-accent"
+                  className="relative rounded-full bg-accent px-1.5 text-xs font-semibold text-on-accent"
                 />
               )}
             </Link>
           ))}
         </nav>
 
-        <div className="mt-auto border-t border-line p-2">
+        <div className="mt-auto border-t border-white/8 p-2">
           <AccountMenu />
         </div>
       </aside>
@@ -198,7 +215,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </header>
 
-      <main className="mx-auto w-full max-w-[72rem] px-4 pt-6 pb-24 sm:px-8 lg:px-10 lg:pt-10">{children}</main>
+      <main className="page-flow mx-auto w-full max-w-[72rem] px-4 pt-6 pb-24 sm:px-8 lg:px-10 lg:pt-10">{children}</main>
     </div>
   );
 }
@@ -216,8 +233,8 @@ export function PageHeader({
   return (
     <header className="mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
       <div className="grid gap-1">
-        <h1 className="text-2xl font-semibold tracking-[-0.025em]">{title}</h1>
-        {description && <p className="max-w-[65ch] text-sm text-muted">{description}</p>}
+        <h1 className="text-[1.875rem] leading-[1.1] font-bold tracking-[-0.025em]">{title}</h1>
+        {description && <p className="max-w-[65ch] text-[15px] text-ink-2">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </header>

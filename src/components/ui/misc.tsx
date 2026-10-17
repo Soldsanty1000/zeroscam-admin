@@ -22,7 +22,7 @@ export function EmptyState({
   return (
     <div role={tone === 'danger' ? 'alert' : undefined} className="flex flex-col items-center gap-1.5 px-6 py-16 text-center">
       <div className={cn('mb-2 [&_svg]:size-5', tone === 'danger' ? 'text-danger' : 'text-muted')}>{icon}</div>
-      <p className="text-sm font-medium">{title}</p>
+      <p className="text-[15px] font-semibold">{title}</p>
       {description && <p className="max-w-xs text-[13px] text-muted">{description}</p>}
       {action && <div className="mt-3">{action}</div>}
     </div>

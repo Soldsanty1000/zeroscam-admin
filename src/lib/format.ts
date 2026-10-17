@@ -87,6 +87,48 @@ export function defang(url: string): string {
   return url.replace(/^http/i, 'hxxp').replace(/\./g, '[.]');
 }
 
+/** Pedazo de una URL; `mark` es lo que delata un posible engaño. */
+export type UrlPart = { text: string; mark: boolean };
+
+// Lo que suelen pegar con guion para parecer oficiales: "bbva-mx-seguridad",
+// "sat-gob-mx". Mismos ejemplos que enseña la pantalla de inicio de sesión.
+const BAIT =
+  /-(?:mx-)?(?:seguridad|soporte|verifica\w*|alertas?|pagos?|reembolso|enlinea|premios?|cuenta|login|banca|gob-mx|paquete\w*|citas)(?=[.-]|$)/gi;
+
+/**
+ * Parte una URL y marca lo que delata un dominio falso, solo en el host:
+ * caracteres que no son latinos (homógrafos), dominios en punycode, un 0 o 1
+ * entre letras ("g00gle", "paypa1") y palabras de anzuelo pegadas con guion.
+ * Es una pista visual para quien revisa, no un veredicto.
+ */
+export function markUrl(url: string): UrlPart[] {
+  const at = url.search(/[^/]\/[^/]|[?#]/);
+  const scheme = url.match(/^[a-z][a-z0-9+.-]*:\/\//i)?.[0] ?? '';
+  const end = at === -1 ? url.length : at + 1;
+  const host = url.slice(scheme.length, end);
+  const marked = new Array<boolean>(host.length).fill(false);
+  const flag = (from: number, to: number) => marked.fill(true, from, to);
+
+  for (const match of host.matchAll(/[^\x00-\x7f]/g)) flag(match.index, match.index + match[0].length);
+  for (const match of host.matchAll(/xn--[a-z0-9-]+/gi)) flag(match.index, match.index + match[0].length);
+  // Un 0 o 1 entre letras ("g00gle", "netf1ix"), o cerrando una palabra
+  // larga ("paypa1"); "web1" o "srv0" son nombres normales.
+  for (const match of host.matchAll(/(?<=[a-z])[01]+(?=[a-z])|(?<=[a-z]{5})[01](?=[.-]|$)|(?<=^|[.-])[01](?=[a-z]{4})/gi)) {
+    flag(match.index, match.index + match[0].length);
+  }
+  for (const match of host.matchAll(BAIT)) flag(match.index, match.index + match[0].length);
+
+  const parts: UrlPart[] = scheme ? [{ text: scheme, mark: false }] : [];
+  for (let i = 0; i < host.length; ) {
+    let j = i;
+    while (j < host.length && marked[j] === marked[i]) j++;
+    parts.push({ text: host.slice(i, j), mark: marked[i] });
+    i = j;
+  }
+  if (end < url.length) parts.push({ text: url.slice(end), mark: false });
+  return parts;
+}
+
 export function initials(name: string, lastName = ''): string {
   return ((name[0] ?? '') + (lastName[0] ?? name[1] ?? '')).toUpperCase();
 }
