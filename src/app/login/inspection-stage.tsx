@@ -462,6 +462,10 @@ function Specimens({ reduced }: { reduced: boolean }) {
   );
 }
 
+/** Caja del escenario; también la usa el hueco que se pinta antes de hidratar. */
+export const STAGE_CLASS =
+  "stage relative isolate flex min-h-[25rem] flex-col overflow-hidden px-5 pt-5 pb-6 sm:px-10 sm:pt-8 sm:pb-8 lg:sticky lg:top-0 lg:h-dvh lg:px-14 lg:pt-10 lg:pb-12";
+
 export function InspectionStage() {
   const reduced = useReducedMotion() ?? false;
   const stage = useRef<HTMLDivElement>(null);
@@ -472,7 +476,7 @@ export function InspectionStage() {
   return (
     <div
       ref={stage}
-      className="stage relative isolate flex min-h-[25rem] flex-col overflow-hidden px-5 pt-5 pb-6 sm:px-10 sm:pt-8 sm:pb-8 lg:sticky lg:top-0 lg:h-dvh lg:px-14 lg:pt-10 lg:pb-12"
+      className={STAGE_CLASS}
     >
       <div aria-hidden className="stage-field absolute inset-0 -z-10">
         <DomainField />

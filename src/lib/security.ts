@@ -40,15 +40,40 @@ export function createNonce(): string {
 }
 
 /**
+ * SHA-256 del CSS que `sonner` mete en un `<style>` al cargarse (`__insertCSS`).
+ * La librería no acepta nonce, así que el CSP permite ese texto exacto y nada
+ * más. Si una actualización de sonner cambia su CSS, el navegador bloquea ese
+ * estilo y hay que poner aquí el hash nuevo.
+ */
+export const SONNER_STYLE_HASH = "'sha256-StEaX+se6YS7pqjzrzMIA0KaX9zF/8zAhvQXZAe5epY='";
+
+/**
+ * SHA-256 de la cadena vacía. sonner primero agrega su `<style>` vacío y
+ * después le pone el texto; sin este hash el navegador reporta el paso vacío
+ * como violación. Un `<style>` vacío no aplica nada.
+ */
+export const EMPTY_STYLE_HASH = "'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='";
+
+/**
+ * CSP de las respuestas que no pasan por `proxy.ts` (`/_next/static`,
+ * `/_next/image`, `favicon.ico`): no son documentos, así que no cargan nada.
+ * Cubre también los 404 de esas rutas (alerta de ZAP 10038). `base-uri` y
+ * `form-action` no heredan de `default-src`, por eso van explícitas (ZAP 10055).
+ */
+export const STATIC_CSP = "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+/**
  * Content-Security-Policy de cada documento.
  *
  * - `script-src` con nonce y `strict-dynamic`: solo corre lo que Next.js marca
  *   con el nonce de esta respuesta. `unsafe-eval` únicamente en desarrollo
  *   (React lo usa para reconstruir pilas de error); en producción no.
- * - `style-src` conserva `unsafe-inline`: `sonner` e `input-otp` crean sus
- *   `<style>` al vuelo sin nonce, y los `style=""` de los componentes también lo
- *   necesitan. Un estilo no ejecuta código; el riesgo que queda es de
- *   apariencia o de exfiltración por CSS, y `connect-src` e `img-src` lo acotan.
+ * - `style-src` sin `unsafe-inline` (alerta de ZAP 10055): Next.js pone el
+ *   nonce en sus hojas de estilo y el `<style>` que crea `sonner` se permite por
+ *   su hash ({@link SONNER_STYLE_HASH}, {@link EMPTY_STYLE_HASH}). Los estilos que React o motion ponen
+ *   desde JavaScript usan CSSOM y el CSP no los bloquea; por eso el HTML del
+ *   servidor no debe traer atributos `style=""`. En desarrollo sí se permite
+ *   `unsafe-inline`, porque el recargador en caliente inserta `<style>` sin nonce.
  * - `connect-src`: el propio origen y el de la API, nada más.
  * - `img-src` con el origen de la API: las miniaturas de evidencia son
  *   `<img src="{API}/uploads/...">`.
@@ -64,7 +89,7 @@ export function buildCsp(options: {
   const directives = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''}`,
-    "style-src 'self' 'unsafe-inline'",
+    `style-src 'self' ${isDev ? "'unsafe-inline'" : `'nonce-${nonce}' ${SONNER_STYLE_HASH} ${EMPTY_STYLE_HASH}`}`,
     `img-src 'self' blob: data: ${apiOrigin}`,
     "font-src 'self'",
     // En desarrollo, además, el websocket del recargador en caliente.

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { buildCsp, createNonce, resolveApiUrl } from '@/lib/security';
+import { buildCsp, createNonce, resolveApiUrl, securityHeaders } from '@/lib/security';
 
 // Content-Security-Policy con nonce: se genera uno nuevo por petición, se manda
 // al render en `x-nonce` y Next.js lo pone en sus propios scripts. Por eso todas
@@ -17,6 +17,21 @@ export function proxy(request: NextRequest) {
   const secure =
     request.nextUrl.protocol === 'https:' || request.headers.get('x-forwarded-proto') === 'https';
   const csp = buildCsp({ nonce, apiOrigin: api.origin, isDev, upgradeInsecure: secure && !isDev });
+
+  // Next ya no quita la "/" final (`skipTrailingSlashRedirect` en next.config.ts):
+  // su 308 salía sin cabeceras de seguridad. Este 308 sí las lleva.
+  const { pathname } = request.nextUrl;
+  if (pathname.length > 1 && pathname.endsWith('/')) {
+    // URL simple: un clon de `nextUrl` vuelve a poner la "/" al serializarse.
+    const url = new URL(request.url);
+    url.pathname = pathname.replace(/\/+$/, '') || '/';
+    const redirect = NextResponse.redirect(url, 308);
+    redirect.headers.set('Content-Security-Policy', csp);
+    for (const { key, value } of securityHeaders({ production: !isDev, https: api.https })) {
+      redirect.headers.set(key, value);
+    }
+    return redirect;
+  }
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);

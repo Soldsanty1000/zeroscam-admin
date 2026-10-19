@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion, useAnimate, useReducedMotion, type Variants } from 'motion/react';
 import { OTPInput, type SlotProps } from 'input-otp';
 import { ArrowBigUp, ArrowLeft, Check, CircleAlert, CircleCheck, Eye, EyeOff, LoaderCircle } from 'lucide-react';
 import { errorMessage, login, verifyCode, type TwoFactorChallenge } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { InspectionStage } from './inspection-stage';
+import { InspectionStage, STAGE_CLASS } from './inspection-stage';
 import './login.css';
 
 /** Lo que dura el código de verificación, igual que en el servidor. */
@@ -35,14 +35,27 @@ const itemVariants: Variants = {
 const control =
   'h-[52px] w-full rounded-[10px] border border-(color:--field) bg-surface px-4 text-[17px] text-ink transition-[border-color,box-shadow] duration-200 ease-out outline-none placeholder:text-muted hover:border-ink-2 focus-visible:border-ink focus-visible:shadow-[0_0_0_3px_var(--accent)] focus-visible:outline-none';
 
+const noSubscribe = () => () => {};
+
+/**
+ * `false` en el HTML del servidor y `true` ya en el navegador. Las animaciones
+ * de motion escriben su estado inicial como `style=""` en el HTML del servidor,
+ * y el CSP (sin `unsafe-inline`) bloquea esos atributos. En el navegador motion
+ * usa CSSOM, que sí está permitido; por eso esas partes se pintan hasta hidratar.
+ */
+function useHydrated() {
+  return useSyncExternalStore(noSubscribe, () => true, () => false);
+}
+
 export default function LoginPage() {
+  const hydrated = useHydrated();
   return (
     <div className="login-page grid min-h-dvh bg-bg lg:grid-cols-[minmax(0,1.3fr)_minmax(30rem,1fr)]">
-      <InspectionStage />
+      {hydrated ? <InspectionStage /> : <div aria-hidden className={STAGE_CLASS} />}
 
       <main className="relative z-10 flex flex-col px-5 pt-10 pb-8 sm:px-10 lg:min-h-dvh lg:px-14 lg:pt-12 xl:px-20 lg:shadow-[-40px_0_90px_-50px_rgb(5_11_34/0.6)] dark:lg:border-l dark:lg:border-white/8">
         <div className="my-auto w-full max-w-[25rem] py-4 lg:py-10">
-          <LoginPanel />
+          {hydrated ? <LoginPanel /> : <div className="min-h-[30rem]" />}
         </div>
 
         <p className="mt-10 max-w-[56ch] border-t border-line pt-6 text-sm text-ink-2 lg:hidden">
