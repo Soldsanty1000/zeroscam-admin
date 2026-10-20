@@ -1,7 +1,7 @@
 'use client';
 
 import { useId } from 'react';
-import NumberFlow from '@number-flow/react';
+import NumberFlow from '@/components/number-flow';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { label as readable, number, RISK_ORDER } from '@/lib/format';
 import { cn } from '@/lib/utils';

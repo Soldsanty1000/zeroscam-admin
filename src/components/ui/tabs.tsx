@@ -1,7 +1,7 @@
 'use client';
 
 import { Tabs as Base } from '@base-ui/react/tabs';
-import NumberFlow from '@number-flow/react';
+import NumberFlow from '@/components/number-flow';
 import { cn } from '@/lib/utils';
 
 export type TabItem = { value: string; label: string; count?: number; dot?: string };
