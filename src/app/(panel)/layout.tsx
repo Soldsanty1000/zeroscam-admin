@@ -20,6 +20,14 @@ export default function PanelLayout({ children }: LayoutProps<'/'>) {
   const [ready, setReady] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
 
+  // Sin perfil o sin cuenta el panel sigue sirviendo; un 401 ya lo atiende `api`.
+  const loadMe = useCallback(() => {
+    api
+      .get<Me>('/users/me')
+      .then(({ data }) => setMe(data))
+      .catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     if (!getAccessToken()) {
       router.replace('/login');
@@ -27,11 +35,7 @@ export default function PanelLayout({ children }: LayoutProps<'/'>) {
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- el token vive en localStorage: solo se conoce en el navegador
     setReady(true);
-    // Sin perfil o sin cuenta el panel sigue sirviendo; un 401 ya lo atiende `api`.
-    api
-      .get<Me>('/users/me')
-      .then(({ data }) => setMe(data))
-      .catch(() => undefined);
+    loadMe();
     api
       .get<{ byStatus: Count[] }>('/stats')
       .then(({ data }) => {
@@ -39,7 +43,17 @@ export default function PanelLayout({ children }: LayoutProps<'/'>) {
         setPending(of('RECIBIDO') + of('EN_REVISION'));
       })
       .catch(() => undefined);
-  }, [router]);
+  }, [router, loadMe]);
+
+  // El perfil se edita en la app: al volver a esta pestaña se pide de nuevo
+  // para que el nombre y el alias del menú no se queden con lo de antes.
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === 'visible' && getAccessToken()) loadMe();
+    }
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [loadMe]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {

@@ -82,6 +82,7 @@ function AccountMenu({ compact = false }: { compact?: boolean }) {
                 <p className="truncate text-[13px] font-medium">
                   {me.name} {me.lastName}
                 </p>
+                {me.alias && <p className="truncate text-xs text-ink-2">@{me.alias}</p>}
                 <p className="truncate text-xs text-muted">{me.email}</p>
               </div>
             )}

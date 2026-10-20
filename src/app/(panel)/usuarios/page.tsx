@@ -19,6 +19,8 @@ type User = {
   id: string;
   name: string;
   lastName: string;
+  /** Nombre de usuario que la persona edita en la app. */
+  alias?: string;
   country: string;
   email: string;
   role: string;
@@ -77,6 +79,15 @@ export default function UsersPage() {
     load();
   }, [load]);
 
+  // Un alias o nombre cambiado desde la app se ve al regresar a la pestaña.
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === 'visible') load();
+    }
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [load]);
+
   // El texto espera a que se deje de escribir; los selectores aplican al momento.
   // Un filtro vacío no se manda: el servidor rechaza `role=` sin valor.
   useEffect(() => {
@@ -124,7 +135,7 @@ export default function UsersPage() {
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Nombre, apellido o correo…"
+            placeholder="Nombre, alias o correo…"
             aria-label="Buscar usuarios"
             className="pl-9 [&::-webkit-search-cancel-button]:hidden"
           />
@@ -221,7 +232,10 @@ export default function UsersPage() {
                         <span className="truncate">{fullName}</span>
                         {self && <span className="shrink-0 rounded bg-accent-wash px-1 text-[11px] text-accent-ink">Tú</span>}
                       </span>
-                      <span className="truncate text-[13px] text-muted">{user.email}</span>
+                      <span className="truncate text-[13px] text-muted">
+                        {user.alias && !deleted && <span className="text-ink-2">@{user.alias} · </span>}
+                        {user.email}
+                      </span>
                     </span>
                   </span>
 

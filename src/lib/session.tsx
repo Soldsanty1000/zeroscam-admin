@@ -6,6 +6,8 @@ export type Me = {
   id: string;
   name: string;
   lastName: string;
+  /** Nombre de usuario que se edita en la app; falta si el API es anterior. */
+  alias?: string;
   email: string;
   role: string;
 };

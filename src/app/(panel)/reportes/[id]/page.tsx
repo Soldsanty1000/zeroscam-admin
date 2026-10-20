@@ -33,7 +33,7 @@ type Report = {
     observations?: string;
     changedAt: string;
   }[];
-  reporter?: { name: string; lastName: string; email: string; country: string };
+  reporter?: { name: string; lastName: string; alias?: string; email: string; country: string };
   message?: string;
 };
 
@@ -424,6 +424,9 @@ export default function ReportPage() {
                     <span className="truncate text-sm font-medium">
                       {report.reporter.name} {report.reporter.lastName}
                     </span>
+                    {report.reporter.alias && (
+                      <span className="truncate text-[13px] text-ink-2">@{report.reporter.alias}</span>
+                    )}
                     <span className="truncate text-[13px] text-muted">{report.reporter.email}</span>
                   </span>
                 </div>
