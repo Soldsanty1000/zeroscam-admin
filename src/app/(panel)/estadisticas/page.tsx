@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import NumberFlow from '@number-flow/react';
+import NumberFlow from '@/components/number-flow';
 import { Lock, TriangleAlert } from 'lucide-react';
 import { PageHeader } from '@/components/app-shell';
 import { STATUS_VAR } from '@/components/badges';

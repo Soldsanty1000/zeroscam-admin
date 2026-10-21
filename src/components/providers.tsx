@@ -3,6 +3,7 @@
 import { MotionConfig } from 'motion/react';
 import { ThemeProvider, useTheme } from 'next-themes';
 import { Toaster } from 'sonner';
+import { NonceContext } from './number-flow';
 import { TooltipProvider } from './ui/tooltip';
 
 function ThemedToaster() {
@@ -33,9 +34,11 @@ export function Providers({ children, nonce }: { children: React.ReactNode; nonc
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange nonce={nonce}>
       {/* Con "reducir movimiento" Motion deja solo los fundidos. */}
       <MotionConfig reducedMotion="user">
-        <TooltipProvider delay={500} closeDelay={0}>
-          {children}
-        </TooltipProvider>
+        <NonceContext.Provider value={nonce}>
+          <TooltipProvider delay={500} closeDelay={0}>
+            {children}
+          </TooltipProvider>
+        </NonceContext.Provider>
         <ThemedToaster />
       </MotionConfig>
     </ThemeProvider>

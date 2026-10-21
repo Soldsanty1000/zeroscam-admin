@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu } from '@base-ui/react/menu';
-import NumberFlow from '@number-flow/react';
+import NumberFlow from '@/components/number-flow';
 import { motion } from 'motion/react';
 import { ChartNoAxesColumn, Check, ChevronsUpDown, Inbox, LogOut, Monitor, Moon, Search, Sun, Users } from 'lucide-react';
 import { useTheme } from 'next-themes';
